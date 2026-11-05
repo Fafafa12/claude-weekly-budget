@@ -14,6 +14,8 @@ It works in the terminal and in the VS Code extension.
 
 It shows how much of the week you have used, how much the plan allows by tonight, and what is left (or over) for today.
 
+Advanced: `WEEKLY_BUDGET_TZ_OFFSET_MIN` in the environment overrides the time zone with a fixed offset, in minutes east of UTC (a whole number from -840 to 840, so `180` is UTC+3). It is normally unset.
+
 ## Commands
 
 | Command | What it does |
@@ -30,7 +32,11 @@ You choose one mode in `/budget-config`:
 - **Re-warn.** A notification on every message you send while you are over.
 - **Block.** Your next message is held back, and so is each one after it while you are over. The text goes back into the prompt box so you lose nothing. A task that is already running finishes, and tool calls are never blocked.
 
+Re-warn and block act only on messages you send yourself while no task is running. Automated and agent messages pass through untouched: background task notifications, scheduled and `/loop` prompts, messages from other sessions or plugins, and anything delivered into a task that is already running, a message you type while it runs included.
+
 There is also an early **heads-up** for when little of today is left. By default it fires when 25% of today's share is left. You can pick 10%, 25% or 50%, or turn it off.
+
+At the weekly limit itself it shows 🔴 "Weekly limit reached", with no notification and no block, because Claude stops on its own.
 
 To get past a warning or a block, snooze. A snooze silences warnings and lets messages through in block mode. `/budget` and `/budget-config` are never blocked.
 
@@ -49,11 +55,11 @@ Block goes by the latest reading from any of your sessions in the current week, 
 
 Claude Code draws the status line itself: it puts "⚠ weekly-budget:" in front and decides the colour, which is why the glyph carries the state. In VS Code the plugin shows the pane and no status line.
 
-The figures come from the usage Claude Code reports after each response. Before your first response in a new session, the plugin uses the latest reading from another of your sessions in the same week, marked with its time once it is over 15 minutes old. If there is none, it says "no reading yet". Usage on claude.ai or the mobile app shows up after your next response in Claude Code.
+The figures come from the usage Claude Code reports after each response. Before your first response in a new session, the plugin uses the latest reading from another of your sessions in the same week. If there is none, it says "no reading yet". A reading over 15 minutes old is shown as last known everywhere: the status line and the VS Code pane's title end with "as of 14:00" ("as of Tue 14:00" when it is from an earlier day), and `/budget` says "Last known, as of 14:00". Usage on claude.ai or the mobile app shows up after your next response in Claude Code.
 
 ## Requirements
 
-- A Claude Pro, Max or Ultra subscription. Without a weekly limit (for example with an API key) there is no reading, and the plugin does nothing.
+- A Claude Pro, Max or Ultra subscription. Without a weekly limit (for example with an API key) there is no reading: the plugin only shows "no reading yet", and never warns or blocks.
 - Mods turned on. They are on by default from Claude Code CLI 2.1.287 and VS Code extension 2.1.299, so you need at least those versions.
 
 ## When it does nothing
@@ -76,6 +82,10 @@ In a Claude Code session:
 `<github-owner>/<repo>` is a placeholder. It will be filled in when the repository is published. Until then, use a local clone: `claude --plugin-dir ./weekly-budget`.
 
 The plugin keeps its settings, your snooze and the last reading in Claude Code's plugin store on your machine. It makes no network requests of its own and reads no credentials.
+
+## Development
+
+From the repository root, `claude plugin test weekly-budget` runs the tests and `tsc -p weekly-budget` checks the types. The type check needs `weekly-budget/.claude-plugin/types/`, which is gitignored: a Claude session writes it when it loads the plugin. On a fresh clone, open a Claude session that loads the plugin once, for example `claude --plugin-dir ./weekly-budget`.
 
 ## License
 
