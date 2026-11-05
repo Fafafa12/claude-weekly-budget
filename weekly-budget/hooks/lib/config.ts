@@ -14,6 +14,8 @@ export const DEFAULT_CONFIG: Config = {
   showCompactPanel: true,
 }
 
+export const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const // by Weekday
+
 const MODES: readonly Mode[] = ['warn', 'rewarn', 'block']
 const STYLES: readonly StatusStyle[] = ['A', 'B', 'C']
 const SUM_SLACK = 1e-9

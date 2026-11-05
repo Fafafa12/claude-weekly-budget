@@ -115,6 +115,14 @@ export async function refreshQuietly($: EngineInterface): Promise<void> {
   await refresh($).catch(() => {})
 }
 
+// A snooze set from a pane (null ends it): kept in the store for every session,
+// then in this session's atom, then shown by the status line and the other panes.
+export async function applySnooze($: EngineInterface, until: number | null): Promise<void> {
+  await saveSnooze($, until)
+  await update($, snoozedUntilAtom, () => until)
+  await refreshQuietly($)
+}
+
 // A new reading: keep it, share it, toast if it calls for one, and redraw.
 export async function onMeasure($: EngineInterface, rateLimits: readonly SessionRateLimit[]): Promise<void> {
   const now = await $.clock.now()

@@ -1,3 +1,4 @@
+import { DAY_NAMES } from './config'
 import type { Weekday } from './config'
 import type { Budget } from './plan'
 import type { Tz } from './tz'
@@ -16,7 +17,6 @@ export const COLORS = {
 
 const HEIGHT = 34
 const MIN_LABEL_WIDTH = 24
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const // by Weekday
 
 // Coordinates to at most one decimal, which is plenty for a bar a few hundred px wide.
 const n1 = (n: number): string => String(Math.round(n * 10) / 10)
