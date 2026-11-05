@@ -39,6 +39,7 @@ const probe: Plugin = {
 }
 
 type Calls = {
+  surfaceAsks: number
   statuses: (string | undefined)[]
   toasts: string[]
   opens: { id: string; title?: string }[]
@@ -51,12 +52,15 @@ function engine(
   on: On,
   options: { store?: Record<string, unknown> | null; surfaces?: RenderSurface[]; env?: Record<string, string> } = {},
 ) {
-  const calls: Calls = { statuses: [], toasts: [], opens: [], registered: [] }
+  const calls: Calls = { surfaceAsks: 0, statuses: [], toasts: [], opens: [], registered: [] }
   const clock = mock.clock(on, { now })
   mock.env(on, options.env ?? { WEEKLY_BUDGET_TZ_OFFSET_MIN: '180' })
   if (options.store !== null) mock.store(on, options.store ?? {})
 
-  on('session.surfaces', () => ({ value: options.surfaces ?? ['terminal'] }))
+  on('session.surfaces', () => {
+    calls.surfaceAsks++
+    return { value: options.surfaces ?? ['terminal'] }
+  })
   on('ui.status', (_, e) => {
     calls.statuses.push(e.text)
     return { value: undefined }
@@ -238,8 +242,9 @@ test('a prompt that passes untouched reads nothing from the store', async ($, on
   expect(reads).toBeGreaterThan(0)
 })
 
-// What a person can be behind: the VS Code panel's stamp is not documented, so sdk
-// and unclassified count as theirs, and so does a prompt with no origin at all.
+// What a person can be behind, and a prompt with no origin at all. The VS Code
+// panel's stamp is not documented, so sdk and unclassified count as theirs where
+// the session draws somewhere (the terminal, in these tests).
 const held = [
   { label: 'composer', origin: { kind: 'composer' } },
   { label: 'bridge', origin: { kind: 'bridge' } },
@@ -260,6 +265,48 @@ for (const { label, origin } of held) {
 
 // Fri 30% in UTC with the window from Tue 00:00: Thu allows 35%, which the sums
 // make 34.99999999999999. Using exactly that is not over.
+// The SDK host's own turn is `claude -p` or the Agent SDK, which draw nothing; the
+// VS Code panel's prompts may come stamped sdk or unclassified too, and it attaches
+// a surface. So those two kinds are held back only where something is drawn.
+for (const kind of ['sdk', 'unclassified'] as const) {
+  test(`block lets an ${kind} prompt through with no surface attached`, async ($, on) => {
+    engine(on, { store: blocking, surfaces: [] })
+
+    const result = await fromOrigin($, { origin: { kind } })
+
+    expect(result.drop).toBeUndefined()
+    expect(result.text).toBe('hi')
+  })
+
+  test(`rewarn does not toast on an ${kind} prompt with no surface attached`, async ($, on) => {
+    const { calls } = engine(on, {
+      store: { config: { ...pinned, mode: 'rewarn' }, lastReading: reading(43) },
+      surfaces: [],
+    })
+
+    expect((await fromOrigin($, { origin: { kind } })).drop).toBeUndefined()
+    expect(calls.toasts).toEqual([])
+  })
+}
+
+test('block drops an sdk prompt when VS Code is attached', async ($, on) => {
+  engine(on, { store: blocking, surfaces: ['vscode'] })
+
+  const result = await fromOrigin($, { origin: { kind: 'sdk' } })
+
+  expect(result.drop).toContain('/budget snooze 1h')
+})
+
+test('block drops a composer prompt with no surface attached', async ($, on) => {
+  const { calls } = engine(on, { store: blocking, surfaces: [] })
+
+  const result = await fromOrigin($, { origin: { kind: 'composer' } })
+
+  expect(result.drop).toContain('/budget snooze 1h')
+  // Only the kinds a script may be behind ask where the session draws.
+  expect(calls.surfaceAsks).toBe(0)
+})
+
 test('block lets a message through at exactly what the plan allows', async ($, on) => {
   const fri30: Config = { ...DEFAULT_CONFIG, mode: 'block', pins: [{ days: [5], percent: 30 }] }
   const { calls } = engine(on, {

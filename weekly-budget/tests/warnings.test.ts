@@ -137,17 +137,29 @@ test('gate', async () => {
 
 test('only the person\'s own next message is gated', async () => {
   const typed = { origin: { kind: 'composer' } } as const
-  expect(isGated(typed)).toBe(true)
-  expect(isGated({})).toBe(true)
-  expect(isGated({ origin: { kind: 'sdk' } })).toBe(true)
-  expect(isGated({ ...typed, isMeta: true })).toBe(false)
-  expect(isGated({ ...typed, command: { name: 'budget-config', args: '' } })).toBe(false)
-  expect(isGated({ ...typed, command: { name: 'compact', args: '' } })).toBe(true)
-  expect(isGated({ ...typed, turnId: 't1' })).toBe(false)
-  expect(isGated({ origin: { kind: 'observer' } })).toBe(false)
-  expect(isGated({ origin: { kind: 'auto-continuation' } })).toBe(false)
+  expect(isGated(typed, true)).toBe(true)
+  expect(isGated({}, true)).toBe(true)
+  expect(isGated({ origin: { kind: 'sdk' } }, true)).toBe(true)
+  expect(isGated({ ...typed, isMeta: true }, true)).toBe(false)
+  expect(isGated({ ...typed, command: { name: 'budget-config', args: '' } }, true)).toBe(false)
+  expect(isGated({ ...typed, command: { name: 'compact', args: '' } }, true)).toBe(true)
+  expect(isGated({ ...typed, turnId: 't1' }, true)).toBe(false)
+  expect(isGated({ origin: { kind: 'observer' } }, true)).toBe(false)
+  expect(isGated({ origin: { kind: 'auto-continuation' } }, true)).toBe(false)
   // A kind added after this was written is not the person's.
-  expect(isGated({ origin: { kind: 'future-kind' } as unknown as PromptOrigin })).toBe(false)
+  expect(isGated({ origin: { kind: 'future-kind' } as unknown as PromptOrigin }, true)).toBe(false)
+})
+
+// sdk and unclassified may be the VS Code panel's, or a script's: with nothing
+// drawn (a plain claude -p run) nobody is there to hold a message back for.
+test('sdk and unclassified prompts are gated only with a surface attached', async () => {
+  expect(isGated({ origin: { kind: 'sdk' } }, false)).toBe(false)
+  expect(isGated({ origin: { kind: 'unclassified' } }, false)).toBe(false)
+  expect(isGated({ origin: { kind: 'unclassified' } }, true)).toBe(true)
+  for (const kind of ['composer', 'bridge', 'slack-ping'] as const) {
+    expect(isGated({ origin: { kind } }, false)).toBe(true)
+  }
+  expect(isGated({}, false)).toBe(true)
 })
 
 test('parseSnooze', async () => {

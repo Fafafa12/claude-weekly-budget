@@ -50,23 +50,32 @@ export function measureToast(
   return { toast: null, ledger: current }
 }
 
-// The origins a person can be behind. How the VS Code panel stamps what is typed
-// there is not documented, so sdk and unclassified count too: block must hold there.
-const PERSON_ORIGINS: readonly string[] = ['composer', 'bridge', 'sdk', 'slack-ping', 'unclassified']
+// The origins a person is behind.
+const PERSON_ORIGINS: readonly string[] = ['composer', 'bridge', 'slack-ping']
+// The origins a person or a script may be behind: the SDK host's own turn (`claude
+// -p`, the Agent SDK) and one with no stamp. How the VS Code panel stamps what is
+// typed there is not documented, so they count as the person's wherever the session
+// draws on a surface, as VS Code does; a plain `claude -p` run draws on none.
+const SURFACE_ORIGINS: readonly string[] = ['sdk', 'unclassified']
 
 // What isGated reads of a prompt.submit input; the origin may be missing.
 type GateInput = Pick<PromptSubmitInput, 'isMeta' | 'command' | 'turnId'> & { origin?: PromptOrigin }
+
+// Whether isGated's answer for this prompt depends on the session drawing somewhere.
+export const dependsOnSurface = (e: GateInput): boolean => SURFACE_ORIGINS.includes(e.origin?.kind ?? '')
 
 // Whether block and re-warn apply to a prompt: only to the person's own next
 // message, sent while nothing runs. A meta prompt and a /budget command pass
 // untouched, and so do a prompt delivered into a running turn (turnId), which is
 // part of a task already going, and one nobody typed (a notification, a schedule,
 // another session, a plugin, any kind added later), which has no box to go back
-// to, so that dropping it would lose it.
-export function isGated(e: GateInput): boolean {
+// to, so that dropping it would lose it. hasSurface, whether the session draws on
+// any surface, is read only for the kinds dependsOnSurface names.
+export function isGated(e: GateInput, hasSurface: boolean): boolean {
   if (e.isMeta === true || (e.command?.name ?? '').startsWith('budget')) return false
   if (e.turnId !== undefined) return false
-  return e.origin === undefined || PERSON_ORIGINS.includes(e.origin.kind)
+  if (e.origin === undefined || PERSON_ORIGINS.includes(e.origin.kind)) return true
+  return hasSurface && SURFACE_ORIGINS.includes(e.origin.kind)
 }
 
 // What to do with a prompt about to be sent: drop it with a reason, show the

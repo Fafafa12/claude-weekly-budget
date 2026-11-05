@@ -21,7 +21,7 @@ import {
 } from './lib/store'
 import { fixedOffsetTz, systemTz } from './lib/tz'
 import type { Tz } from './lib/tz'
-import { gatePrompt, isGated, measureToast, parseSnooze, toastText } from './lib/warnings'
+import { dependsOnSurface, gatePrompt, isGated, measureToast, parseSnooze, toastText } from './lib/warnings'
 import type { Gate, Toast } from './lib/warnings'
 
 // This session's own state. The store is the truth shared by every session, and
@@ -239,10 +239,12 @@ export async function onMeasure(
 }
 
 // What to do with a prompt about to be sent. Whether it is one to gate at all is
-// decided first, so the prompts that pass untouched cost no store reads. It
-// decides on the shared reading, so the first message of a new chat is held back too.
+// decided first, so the prompts that pass untouched cost no store reads; only the
+// kinds a script may be behind ask where the session draws. It decides on the
+// shared reading, so the first message of a new chat is held back too.
 export async function onPrompt($: EngineInterface, e: PromptSubmitInput): Promise<Gate> {
-  if (!isGated(e)) return null
+  const hasSurface = dependsOnSurface(e) && (await $.session.surfaces()).length > 0
+  if (!isGated(e, hasSurface)) return null
   const { now, cfg, snoozedUntil, budget } = await loadView($)
   return gatePrompt(budget, cfg, snoozedUntil, now)
 }
