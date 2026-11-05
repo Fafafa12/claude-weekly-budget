@@ -737,3 +737,21 @@ test('the full view has the coloured summary too, and no toggle', async ($, on) 
   expect(await ui.find({ key: 'details-toggle' })).toBeUndefined()
   await ui.unmount()
 })
+
+// The host takes a Box width only as a whole percentage (/^\d{1,3}%$/): a plan whose
+// shares are not whole (the default, 100/7 a day, and the window's partial days)
+// must still give whole widths, which add up to the whole bar.
+test('the label widths are whole percentages that add up to 100, whatever the plan', async ($, on) => {
+  engine(on, { store: { config: DEFAULT_CONFIG, lastReading: reading(33) } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+
+  const widths: string[] = []
+  for (let i = 0; i < 8; i++) {
+    const width = (await ui.find({ key: `day-${i}` }))?.props.width
+    if (typeof width === 'string') widths.push(width)
+  }
+  expect(widths).toHaveLength(8)
+  for (const width of widths) expect(width).toMatch(/^\d{1,3}%$/)
+  expect(widths.reduce((sum, width) => sum + Number.parseInt(width, 10), 0)).toBe(100)
+  await ui.unmount()
+})

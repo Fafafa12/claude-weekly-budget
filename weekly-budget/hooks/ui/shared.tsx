@@ -42,12 +42,14 @@ export function renderBar(
   // only in cells), and the weekday labels under it share that width out as the
   // segments do, the narrow ones unlabelled, today's in Claude's colour.
   const { Box, Svg, Text } = els
+  const segments = barSegments(budget)
+  const widths = wholeWidths(segments)
   return (
     <Box flexDirection="column">
       <Svg source={barSvg(budget)} alt={paneTitle(budget, staleSince, tz, now)} height={BAR_HEIGHT} />
       <Box flexDirection="row">
-        {barSegments(budget).map((segment, i) => (
-          <Box key={`day-${i}`} width={`${n1(segment.width)}%`} justifyContent="center">
+        {segments.map((segment, i) => (
+          <Box key={`day-${i}`} width={`${widths[i] ?? 0}%`} justifyContent="center">
             {segment.width >= MIN_LABEL_SHARE &&
               (segment.isToday ? (
                 <Text size="caption" color="claude" weight="semibold">
@@ -65,8 +67,20 @@ export function renderBar(
   )
 }
 
-// Percentages to at most one decimal: "18%", "3.3%".
-const n1 = (n: number): string => String(Math.round(n * 10) / 10)
+// The host takes a Box width only as a whole percentage, so the segments' widths
+// are rounded at each boundary: they still add up to 100, and no label sits more than
+// half a percent off its segment.
+function wholeWidths(segments: readonly { width: number }[]): number[] {
+  let edge = 0
+  let total = 0
+  return segments.map(segment => {
+    total += segment.width
+    const next = Math.round(total)
+    const width = next - edge
+    edge = next
+    return width
+  })
+}
 
 // Where the budget stands, in a word in the state's theme colour: "On track",
 // "Running low", "Over today", "Weekly limit reached".
