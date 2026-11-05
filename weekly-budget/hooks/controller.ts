@@ -33,12 +33,15 @@ export const settingsErrorAtom = atom({ plugin: 'weekly-budget', key: 'settingsE
 export const pinDraftDaysAtom = atom({ plugin: 'weekly-budget', key: 'pinDraftDays' } as const, 'weekend')
 export const compactOpenedAtom = atom({ plugin: 'weekly-budget', key: 'compactOpened' } as const, false)
 export const detailsExpandedAtom = atom({ plugin: 'weekly-budget', key: 'detailsExpanded' } as const, false)
+export const compactRowsAtom = atom({ plugin: 'weekly-budget', key: 'compactRows' } as const, null)
 
 // VS Code's one panel. Its height is what it is asked for, in rows: the bar and the
 // toggle row while the compact view is collapsed, the bar with the details otherwise.
+// Counted from the layout (the bar is 2 rows, the toggle 1, the details about 12, and
+// a gap between each); to be tuned by eye in VS Code.
 const COMPACT = 'compact'
-const COLLAPSED_ROWS = 3
-const EXPANDED_ROWS = 12
+const COLLAPSED_ROWS = 4
+const EXPANDED_ROWS = 17
 
 // The panel as an open request. Titled with the summary, marked "as of" when the
 // reading is last known. The compact view (showCompactPanel) keeps its details
@@ -110,8 +113,10 @@ export async function refresh($: EngineInterface): Promise<void> {
 }
 
 // The panel above the VS Code chat: the summary is its title, and the host draws
-// that, so a changed title is a new open (which retitles). The panes the engine
-// lists are the ones still up: one the person closed is not there, and stays closed.
+// that, so a changed title is a new open (which retitles). So is a changed height:
+// the view may have been switched by another session, and the engine's pane list has
+// no rows, which is why the rows last asked for are kept. The panes the engine lists
+// are the ones still up: one the person closed is not there, and stays closed.
 // Neither view closes it.
 async function syncCompact(
   $: EngineInterface,
@@ -120,7 +125,14 @@ async function syncCompact(
   const pane = (await $.ui.panes()).find(p => p.id === COMPACT)
   if (pane === undefined) return
   const wanted = compactPane(view, await read($, detailsExpandedAtom))
-  if (pane.title !== wanted.title) await $.ui.open(wanted)
+  const isRowsKept = (await read($, compactRowsAtom)) === wanted.rows
+  if (pane.title !== wanted.title || !isRowsKept) await openPane($, wanted)
+}
+
+// Opens the panel as asked, and keeps the rows it was asked for.
+async function openPane($: EngineInterface, pane: ReturnType<typeof compactPane>): Promise<void> {
+  await $.ui.open(pane)
+  if (differs(await read($, compactRowsAtom), pane.rows)) await update($, compactRowsAtom, () => pane.rows)
 }
 
 // The panel as the store, the view and the toggle have it now.
@@ -130,8 +142,8 @@ async function currentCompactPane($: EngineInterface) {
 }
 
 // Opens the panel, and notes that this session has.
-async function openCompact($: EngineInterface): Promise<void> {
-  await $.ui.open(await currentCompactPane($))
+async function openCompact($: EngineInterface, pane: ReturnType<typeof compactPane>): Promise<void> {
+  await openPane($, pane)
   await update($, compactOpenedAtom, () => true)
 }
 
@@ -142,15 +154,16 @@ async function openCompact($: EngineInterface): Promise<void> {
 export async function ensureCompact($: EngineInterface): Promise<void> {
   if (await read($, compactOpenedAtom)) return
   if (!(await $.session.surfaces()).some(s => s !== 'terminal')) return
-  await openCompact($)
+  await openCompact($, await currentCompactPane($))
 }
 
 // The Details toggle of the compact view: opens or closes the details under the bar.
-// The panel is asked again, for the rows the new state needs, under the title it has.
+// The panel, if it is still up (it may have been closed since the press), is asked
+// again for the rows the new state needs, under the title it has.
 export async function toggleDetails($: EngineInterface): Promise<void> {
-  const isExpanded = !(await read($, detailsExpandedAtom))
-  await update($, detailsExpandedAtom, () => isExpanded)
-  await $.ui.open(await currentCompactPane($))
+  const isExpanded = await update($, detailsExpandedAtom, was => !was)
+  if (!(await $.ui.panes()).some(p => p.id === COMPACT)) return
+  await openPane($, compactPane(await loadView($), isExpanded))
 }
 
 export async function getDetailsExpanded($: EngineInterface): Promise<boolean> {
@@ -211,12 +224,11 @@ export async function applyConfig($: EngineInterface, next: Config): Promise<str
 }
 
 // The panel's switch between its two views: compact (on) or full (off). It closes
-// nothing and opens nothing the person closed; a panel that is up is asked again, for
-// the rows of the view it is in now. What the toggle opened stays opened.
+// nothing and opens nothing the person closed; the refresh that follows the change
+// asks a panel that is up again, for the rows of the view it is in now. What the
+// toggle opened stays opened.
 export async function applyCompactPanel($: EngineInterface, isCompact: boolean): Promise<void> {
-  const error = await applyConfig($, { ...(await loadConfig($)), showCompactPanel: isCompact })
-  if (error !== null) return
-  if ((await $.ui.panes()).some(p => p.id === COMPACT)) await $.ui.open(await currentCompactPane($))
+  await applyConfig($, { ...(await loadConfig($)), showCompactPanel: isCompact })
 }
 
 // The reading a measure brings. Its rate limits are the last response's: a measure
@@ -296,7 +308,10 @@ export async function runBudgetCommand($: EngineInterface, args: string): Promis
   const text = args.trim().toLowerCase()
   if (text === '') {
     if ((await $.session.surfaces()).some(s => s !== 'terminal')) {
-      await openCompact($)
+      // The panel is how /budget answers here, so a store that cannot be read still
+      // opens it, plainly titled and collapsed.
+      const plain = { id: COMPACT, title: 'Weekly budget', rows: COLLAPSED_ROWS }
+      await openCompact($, await currentCompactPane($).catch(() => plain))
       return 'Budget panel opened.'
     }
     await $.ui.open({ id: 'details', title: 'Weekly budget' })

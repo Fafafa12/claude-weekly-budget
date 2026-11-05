@@ -285,7 +285,7 @@ for (const surface of SURFACES) {
   test(switching, { plugins: [probe] }, async ($, on) => {
     const { calls, clock, state } = engine(on, { surfaces: ['vscode'], store: { lastReading: reading(33) } })
     await start($, clock, 'vscode')
-    expect(calls.opens).toEqual([{ id: 'compact', title: expect.any(String), rows: 3 }])
+    expect(calls.opens).toEqual([{ id: 'compact', title: expect.any(String), rows: 4 }])
     const ui = await $.ui.mount({ ...PANE, surface })
     expect((await ui.find({ key: 'compact-panel' }))?.props.value).toBe('on')
 
@@ -295,14 +295,14 @@ for (const surface of SURFACES) {
     expect(calls.closes).toEqual([])
     expect(state.panes.map(p => p.id)).toEqual(['compact'])
     expect(calls.opens).toHaveLength(2)
-    expect(calls.opens.at(-1)).toMatchObject({ id: 'compact', rows: 12 })
+    expect(calls.opens.at(-1)).toMatchObject({ id: 'compact', rows: 17 })
     expect((await ui.find({ key: 'compact-panel' }))?.props.value).toBe('off')
 
     await ui.select({ key: 'compact-panel', value: 'on' })
 
     expect((await storedConfig($)).showCompactPanel).toBe(true)
     expect(calls.closes).toEqual([])
-    expect(calls.opens.at(-1)).toMatchObject({ id: 'compact', rows: 3 })
+    expect(calls.opens.at(-1)).toMatchObject({ id: 'compact', rows: 4 })
     await ui.unmount()
   })
 }
