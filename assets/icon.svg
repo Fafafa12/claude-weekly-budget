@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>weekly-budget</title>
+  <!-- Claude-orange tile -->
+  <rect width="512" height="512" rx="112" fill="#D97757"/>
+  <!-- The week as a share-sized bar: wide weekdays and one thin day. The marker
+       stands in the wider gap, at what the plan allows so far; the rest is dimmed. -->
+  <g fill="#F4F3EE">
+    <rect x="66" y="196" width="70" height="120" rx="14"/>
+    <rect x="148" y="196" width="70" height="120" rx="14"/>
+    <rect x="230" y="196" width="70" height="120" rx="14"/>
+    <g opacity="0.55">
+      <rect x="336" y="196" width="28" height="120" rx="14"/>
+      <rect x="376" y="196" width="70" height="120" rx="14"/>
+    </g>
+    <rect x="311" y="140" width="14" height="232" rx="7"/>
+  </g>
+</svg>

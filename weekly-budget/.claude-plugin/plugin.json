@@ -2,6 +2,8 @@
   "name": "weekly-budget",
   "version": "0.1.0",
   "license": "MIT",
+  "author": { "name": "anjrakot" },
+  "icon": "./.claude-plugin/icon.png",
   "description": "Compares your weekly Claude usage with a per-day plan and warns, or holds messages back, when you run ahead of it",
   "types": "./types/index.d.ts"
 }

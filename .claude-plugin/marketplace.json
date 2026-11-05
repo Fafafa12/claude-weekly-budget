@@ -1,0 +1,14 @@
+{
+  "name": "weekly-budget",
+  "owner": {
+    "name": "anjrakot"
+  },
+  "description": "Weekly Claude usage budget: plan your week day by day and get warned when you run ahead of it",
+  "plugins": [
+    {
+      "name": "weekly-budget",
+      "source": "./weekly-budget",
+      "description": "Compares your weekly Claude usage with a per-day plan and warns, or holds messages back, when you run ahead of it"
+    }
+  ]
+}
