@@ -5,7 +5,7 @@ import type { Engine, MockClock, Plugin } from 'claude-code/testing'
 import { DEFAULT_CONFIG } from '../hooks/lib/config'
 import type { Config } from '../hooks/lib/config'
 import { computeBudget } from '../hooks/lib/plan'
-import { fixedOffsetTz } from '../hooks/lib/tz'
+import { fixedOffsetTz, systemTz } from '../hooks/lib/tz'
 import { blockReason, toastText } from '../hooks/lib/warnings'
 
 const HOUR_MS = 3600e3
@@ -553,3 +553,26 @@ test('a bad offset variable falls back to the system zone', async ($, on) => {
 
   expect((await run($, 'budget', 'snooze 1h')).text).toMatch(/^Snoozed until \d\d:\d\d\.$/)
 })
+
+// The override is minutes east of UTC, a whole number from -840 to 840 (UTC-14 to
+// UTC+14). Anything else is ignored, and the machine's own zone is used.
+test('the offset variable takes 840', async ($, on) => {
+  engine(on, { store: blocking, env: { WEEKLY_BUDGET_TZ_OFFSET_MIN: '840' } })
+
+  // 13:00Z is 03:00 the next day at UTC+14.
+  expect((await run($, 'budget', 'snooze 1h')).text).toBe('Snoozed until 03:00.')
+})
+
+test('the offset variable takes -840', async ($, on) => {
+  engine(on, { store: blocking, env: { WEEKLY_BUDGET_TZ_OFFSET_MIN: '-840' } })
+
+  expect((await run($, 'budget', 'snooze 1h')).text).toBe('Snoozed until 23:00.')
+})
+
+for (const raw of ['841', '-841', '999999999999', '90.5']) {
+  test(`an offset variable of ${raw} is ignored`, async ($, on) => {
+    engine(on, { store: blocking, env: { WEEKLY_BUDGET_TZ_OFFSET_MIN: raw } })
+
+    expect((await run($, 'budget', 'snooze 1h')).text).toBe(`Snoozed until ${systemTz.hhmm(now + HOUR_MS)}.`)
+  })
+}

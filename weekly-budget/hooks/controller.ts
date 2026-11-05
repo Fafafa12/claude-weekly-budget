@@ -44,12 +44,17 @@ const compactPane = (v: { budget: Budget | null; staleSince: number | null; tz: 
 const USAGE = 'Usage: /budget, /budget snooze 30m|1h|today|off'
 const NEWER_CONFIG = 'These settings were saved by a newer version of weekly-budget. Update the plugin to change them.'
 
+// UTC-14 to UTC+14 takes in every zone there is.
+const MAX_OFFSET_MIN = 14 * 60
+
 // The local zone: the machine's, unless the environment pins a fixed offset in
-// minutes (WEEKLY_BUDGET_TZ_OFFSET_MIN=180 for UTC+3). The engine ignores TZ=, so
-// that is also how a test fixes the day.
+// whole minutes east of UTC, from -840 to 840 (WEEKLY_BUDGET_TZ_OFFSET_MIN=180 for
+// UTC+3); anything else there is ignored. The engine ignores TZ=, so that is also
+// how a test fixes the day.
 export async function resolveTz($: EngineInterface): Promise<Tz> {
   const raw = (await $.env.get('WEEKLY_BUDGET_TZ_OFFSET_MIN'))?.trim()
-  return raw !== undefined && /^[+-]?\d+$/.test(raw) ? fixedOffsetTz(Number(raw)) : systemTz
+  const offset = raw !== undefined && /^[+-]?\d+$/.test(raw) ? Number(raw) : NaN
+  return Math.abs(offset) <= MAX_OFFSET_MIN ? fixedOffsetTz(offset) : systemTz
 }
 
 // The store read into everything a decision or a display needs, at one `now`.
