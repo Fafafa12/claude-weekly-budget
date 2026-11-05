@@ -116,10 +116,10 @@ The plugin does not run, or draws nothing, in these cases:
 In a Claude Code session:
 
 ```
-/plugin install weekly-budget --marketplace <github-owner>/<repo>
+/plugin install weekly-budget --marketplace Fafafa12/claude-weekly-budget
 ```
 
-`<github-owner>/<repo>` is a placeholder. It will be filled in when the repository is published. Until then, use a local clone: `claude --plugin-dir ./weekly-budget`.
+To try it from a local clone instead: `claude --plugin-dir ./weekly-budget`.
 
 The plugin keeps its settings, your snooze and the last reading in Claude Code's plugin store on your machine. It makes no network requests of its own and reads no credentials.
 
