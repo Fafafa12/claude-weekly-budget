@@ -1,0 +1,5 @@
+# Brainstorm companion files (mockups, server state)
+.superpowers/
+
+# Throwaway spike mod link (to be removed before building)
+.claude/skills/budget-spike
