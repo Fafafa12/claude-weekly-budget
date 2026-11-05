@@ -4,10 +4,10 @@ import { DAY_NAMES, dayShares } from '../lib/config'
 import type { Config, Weekday } from '../lib/config'
 import { paneTitle, pct, stateLabel, textBar } from '../lib/format'
 import type { Budget, BudgetState } from '../lib/plan'
-import { barSvg } from '../lib/svg'
+import { MIN_LABEL_SHARE, barSegments, barSvg } from '../lib/svg'
 import type { Tz } from '../lib/tz'
 
-const BAR_HEIGHT = 34
+const BAR_HEIGHT = 20
 
 // Theme keys, so that the state follows Claude's theme on each surface.
 export const STATE_COLORS: Record<BudgetState, ThemeKey> = { ok: 'success', near: 'warning', over: 'error', limit: 'error' }
@@ -38,19 +38,42 @@ export function renderBar(
     return <Text mono>{textBar(budget.used, budget.allowed)}</Text>
   }
 
-  // The bar is as wide as the body (about 8px a column, less the frame), within what reads well.
-  const width = Math.min(560, Math.max(200, e.props.bodyColumns * 8 - 24))
-  const { Svg } = els
-  const source = barSvg(budget, width, tz)
-  return <Svg source={source} alt={paneTitle(budget, staleSince, tz, now)} width={width} height={BAR_HEIGHT} />
+  // No width: the bar takes the body's, whatever it is (the surface gives its width
+  // only in cells), and the weekday labels under it share that width out as the
+  // segments do, the narrow ones unlabelled, today's in Claude's colour.
+  const { Box, Svg, Text } = els
+  return (
+    <Box flexDirection="column">
+      <Svg source={barSvg(budget)} alt={paneTitle(budget, staleSince, tz, now)} height={BAR_HEIGHT} />
+      <Box flexDirection="row">
+        {barSegments(budget).map((segment, i) => (
+          <Box key={`day-${i}`} width={`${n1(segment.width)}%`} justifyContent="center">
+            {segment.width >= MIN_LABEL_SHARE &&
+              (segment.isToday ? (
+                <Text size="caption" color="claude" weight="semibold">
+                  {DAY_NAMES[segment.weekday]}
+                </Text>
+              ) : (
+                <Text size="caption" dimColor>
+                  {DAY_NAMES[segment.weekday]}
+                </Text>
+              ))}
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  )
 }
+
+// Percentages to at most one decimal: "18%", "3.3%".
+const n1 = (n: number): string => String(Math.round(n * 10) / 10)
 
 // Where the budget stands, in a word in the state's theme colour: "On track",
 // "Running low", "Over today", "Weekly limit reached".
 export function renderStateLabel($: EngineInterface, e: RenderInput<'Pane'>, budget: Budget): RenderElement {
   const { Text } = $.ui.resolve(e)
   return (
-    <Text color={STATE_COLORS[budget.state]} bold>
+    <Text color={STATE_COLORS[budget.state]} weight="semibold">
       {stateLabel(budget.state)}
     </Text>
   )

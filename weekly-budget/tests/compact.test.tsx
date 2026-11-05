@@ -137,7 +137,8 @@ test('compact view, collapsed: the bar and one Details toggle, no numbers', asyn
 
   const bars = await ui.findAll({ type: 'Svg' })
   expect(bars).toHaveLength(1)
-  expect(bars[0]?.props).toMatchObject({ alt: '33% of 39% · 6% left today', width: 456, height: 34 })
+  expect(bars[0]?.props).toMatchObject({ alt: '33% of 39% · 6% left today', height: 20 })
+  expect(bars[0]?.props.width).toBeUndefined()
   expect(String(bars[0]?.props.source)).toStartWith('<svg xmlns="http://www.w3.org/2000/svg"')
   const buttons = await ui.findAll({ type: 'Button' })
   expect(buttons.map(b => [b.key, b.props.label])).toEqual([['details-toggle', '▸ Details']])
@@ -280,19 +281,24 @@ test('full view with a stale reading marks it last known', async ($, on) => {
   await ui.unmount()
 })
 
-test('the bar is as wide as the body, between 200 and 560', async ($, on) => {
+// The bar has no width of its own: it takes the panel's, whatever that is.
+test('the bar stretches to the panel, and the weekday labels line up under it', async ($, on) => {
   engine(on, { store: { config: pinned, lastReading: reading(33) } })
 
-  const widthAt = async (columns: number) => {
+  for (const columns of [10, 60, 200]) {
     const ui = await $.ui.mount({ ...withColumns(columns), surface: 'vscode' })
-    const width = (await ui.find({ type: 'Svg' }))?.props.width
+    expect((await ui.find({ type: 'Svg' }))?.props.width).toBeUndefined()
     await ui.unmount()
-    return width
   }
 
-  expect(await widthAt(40)).toBe(296)
-  expect(await widthAt(10)).toBe(200)
-  expect(await widthAt(200)).toBe(560)
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  const widths = await Promise.all([0, 1, 2, 3, 4, 5, 6, 7].map(async i => (await ui.find({ key: `day-${i}` }))?.props.width))
+  expect(widths).toEqual(['3%', '18%', '18%', '18%', '5%', '5%', '18%', '15%'])
+  // The first Tue is too narrow for its label; the last one has it.
+  expect(await ui.findAll({ type: 'Text', text: /^Tue$/ })).toHaveLength(1)
+  expect((await ui.find({ type: 'Text', text: /^Thu$/ }))?.props).toMatchObject({ color: 'claude', weight: 'semibold' })
+  expect((await ui.find({ type: 'Text', text: /^Wed$/ }))?.props.dimColor).toBe(true)
+  await ui.unmount()
 })
 
 test('no reading text', async ($, on) => {

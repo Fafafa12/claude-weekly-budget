@@ -219,7 +219,8 @@ test('vscode draws the bar as an Svg, not as text', async ($, on) => {
 
   const bars = await ui.findAll({ type: 'Svg' })
   expect(bars).toHaveLength(1)
-  expect(bars[0]?.props).toMatchObject({ alt: '33% of 39% · 6% left today', width: 456, height: 34 })
+  expect(bars[0]?.props).toMatchObject({ alt: '33% of 39% · 6% left today', height: 20 })
+  expect(bars[0]?.props.width).toBeUndefined()
   expect(String(bars[0]?.props.source)).toStartWith('<svg xmlns="http://www.w3.org/2000/svg"')
   expect(await ui.find({ type: 'Text', text: /│/ })).toBeUndefined()
   await ui.unmount()
@@ -337,7 +338,7 @@ for (const surface of SURFACES) {
       engine(on, { store: { config: pinned, lastReading: reading(used) } })
       const ui = await $.ui.mount({ ...PANE, surface })
 
-      expect((await ui.find({ type: 'Text', text: new RegExp(`^${label}$`) }))?.props).toMatchObject({ color, bold: true })
+      expect((await ui.find({ type: 'Text', text: new RegExp(`^${label}$`) }))?.props).toMatchObject({ color, weight: 'semibold' })
       await ui.unmount()
     })
   }

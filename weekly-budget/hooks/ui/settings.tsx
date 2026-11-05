@@ -153,7 +153,7 @@ function choiceRow(
         const choice =
           value === current ? (
             <Button key={key} label={label} plain onPress={() => onPick(value)}>
-              <Text color="claude" bold>
+              <Text color="claude" weight="semibold">
                 {label}
               </Text>
             </Button>
