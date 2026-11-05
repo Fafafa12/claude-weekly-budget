@@ -1,6 +1,6 @@
 import { DAY_NAMES } from './config'
 import type { StatusStyle } from './config'
-import { EPS } from './plan'
+import { OVER_MARGIN } from './plan'
 import type { Budget, BudgetState } from './plan'
 import type { Tz } from './tz'
 
@@ -28,7 +28,7 @@ export function stateGlyph(s: BudgetState): string {
 }
 
 // Today's balance, "6% left" or "4% over", as the state has it rather than the sign
-// of left: float noise may leave a budget that is not over a hair below zero.
+// of left: a budget within OVER_MARGIN of the plan is not over, and reads "0% left".
 function balance(b: Budget): string {
   return b.state === 'over' ? `${pct(-b.left)}% over` : `${pct(Math.max(0, b.left))}% left`
 }
@@ -50,12 +50,13 @@ export function countdown(ms: number): string {
 }
 
 // Used fills with █ up to the mark of what the plan allows (│), and past the
-// mark with ▓, so that "over" reads without colour. Being over always shows at
-// least one ▓ right after the mark, even when used rounds to the mark's cell.
+// mark with ▓, so that "over" reads without colour. Being over (by more than
+// OVER_MARGIN, as the state has it) always shows at least one ▓ right after the
+// mark, even when used rounds to the mark's cell.
 export function textBar(used: number, allowed: number, cells = 20): string {
   const markAt = Math.min(cells - 1, Math.round((allowed / 100) * cells))
   const usedCells = Math.round((used / 100) * cells)
-  const overCells = used > allowed + EPS ? Math.max(usedCells - markAt - 1, 1) : 0
+  const overCells = used > allowed + OVER_MARGIN ? Math.max(usedCells - markAt - 1, 1) : 0
   let bar = ''
   for (let i = 0; i < cells; i++) {
     if (i === markAt) bar += '│'

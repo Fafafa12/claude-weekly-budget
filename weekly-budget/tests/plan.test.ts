@@ -145,6 +145,19 @@ test('using exactly what the plan allows is not over, through float noise', asyn
   expect(at(35.1).state).toBe('over')
 })
 
+// The default plan (100/7 a day) at Thu 15:00 in a window from Tue 20:00 allows
+// 2.381 + 14.286 + 14.286 = 30.952 by tonight, which shows as 31%. A reading has one
+// decimal, so 31.0 is on the plan, not over; 31.1 is over.
+test("over is decided at the reading's precision", async () => {
+  const even = (used: number) => computeBudget({ percentUsed: used, resetsMs: reset, at: now }, DEFAULT_CONFIG, now, tz)
+  expect(r6(even(31).allowed)).toBe(30.952381)
+  expect(even(31).state).toBe('near')
+  expect(even(31.1).state).toBe('over')
+  // Half a display unit is the line: just inside it is not over, just past it is.
+  expect(even(30.952381 + 0.049).state).toBe('near')
+  expect(even(30.952381 + 0.051).state).toBe('over')
+})
+
 test('computeBudget clamps today to the window', async () => {
   const reading = { percentUsed: 10, resetsMs: reset, at: now }
   const before = computeBudget(reading, cfg, reset - 8 * DAY_MS, tz)

@@ -10,8 +10,13 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const WEEK_MS = 7 * DAY_MS
 
 // How far apart two percents may be and still be the same: sums of shares carry
-// float noise (35 can come out as 34.99999999999999), and that is not being over.
+// float noise (35 can come out as 34.99999999999999).
 export const EPS = 1e-9
+
+// How far past the plan a reading must be to be over. A reading has one decimal, so
+// being over is decided at half of that: 31.0 against 30.952 allowed is on the plan
+// (both show as 31%), 31.1 is over. This also covers the float noise above.
+export const OVER_MARGIN = 0.05
 
 export type BudgetState = 'ok' | 'near' | 'over' | 'limit'
 // A stretch of the window inside one local calendar day.
@@ -81,7 +86,7 @@ export function computeBudget(r: Reading, cfg: Config, now: number, tz: Tz): Bud
 
   let state: BudgetState = 'ok'
   if (r.percentUsed >= 100) state = 'limit'
-  else if (left < -EPS) state = 'over'
+  else if (left < -OVER_MARGIN) state = 'over'
   else if (left <= cfg.headsUpFraction * todayShare + EPS) state = 'near'
 
   return {

@@ -274,6 +274,25 @@ test('block lets a message through at exactly what the plan allows', async ($, o
   expect(calls.toasts).toEqual([])
 })
 
+// The default plan allows 30.952 by tonight on Thu 15:00, shown as 31%. A reading of
+// 31.0 is on the plan at a reading's one decimal, so it is not held back.
+test('block lets a message through at 31.0 of 30.952 allowed', async ($, on) => {
+  const { calls } = engine(on, { store: { config: { ...DEFAULT_CONFIG, mode: 'block' }, lastReading: reading(31) } })
+
+  const result = await submit($)
+
+  expect(result.drop).toBeUndefined()
+  expect(calls.toasts).toEqual([])
+})
+
+test('block drops a message at 31.1 of 30.952 allowed', async ($, on) => {
+  engine(on, { store: { config: { ...DEFAULT_CONFIG, mode: 'block' }, lastReading: reading(31.1) } })
+
+  const result = await submit($)
+
+  expect(result.drop).toStartWith("Over today's budget (31.1% of 31% allowed by tonight).")
+})
+
 test('block fails open with no reading', async ($, on) => {
   const { calls, clock } = engine(on, { store: { config: { ...pinned, mode: 'block' } } })
 

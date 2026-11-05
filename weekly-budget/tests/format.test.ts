@@ -131,6 +131,19 @@ test('the state, not the sign of left, decides left or over', async () => {
   expect(statusLine(hair, 'A', null, tz, now)).toBe('🟡 Week 39% / 39% allowed · today 0% left')
 })
 
+// The default plan allows 30.952 by tonight on Thu 15:00, shown as 31%: a reading of
+// 31.0 is on the plan, so nothing says "31% of 31% · 0% over".
+test('a reading within half a display unit of the plan reads as on it', async () => {
+  const even = (used: number) => computeBudget({ percentUsed: used, resetsMs: reset, at: now }, DEFAULT_CONFIG, now, tz)
+  expect(paneTitle(even(31), null, tz, now)).toBe('🟡 31% of 31% · 0% left today')
+  expect(statusLine(even(31), 'A', null, tz, now)).toBe('🟡 Week 31% / 31% allowed · today 0% left')
+  expect(textBar(31, even(31).allowed)).not.toContain('▓')
+
+  expect(todayText(even(31.1))).toBe('0.1% over today')
+  expect(paneTitle(even(31.1), null, tz, now)).toBe('🔴 31.1% of 31% · 0.1% over today')
+  expect(textBar(31.1, even(31.1).allowed)).toContain('▓')
+})
+
 test('paneTitle', async () => {
   expect(paneTitle(at(33), null, tz, now)).toBe('🟢 33% of 39% · 6% left today')
   expect(paneTitle(at(43), null, tz, now)).toBe('🔴 43% of 39% · 4% over today')
