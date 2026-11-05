@@ -20,9 +20,9 @@ Advanced: `WEEKLY_BUDGET_TZ_OFFSET_MIN` in the environment overrides the time zo
 
 | Command | What it does |
 | --- | --- |
-| `/budget` | Opens the details: used, allowed by tonight, today's balance, when the week resets, your plan, the mode and the snooze state. It has snooze buttons. |
+| `/budget` | In the terminal, opens the details: used, allowed by tonight, today's balance, when the week resets, your plan, the mode and the snooze state, with snooze buttons. In VS Code, opens the budget panel (see below), even if you closed it. |
 | `/budget snooze 30m`, `1h`, `today` or `off` | Snoozes warnings for that long (any number of minutes or hours works), until the end of today, or ends the snooze. |
-| `/budget-config` | Opens the settings: the plan, the mode, the heads-up, the status line style, the snooze durations and the VS Code panel. |
+| `/budget-config` | Opens the settings: the plan, the mode, the heads-up, the status line style, the snooze durations and the VS Code panel's view. |
 
 ## Warnings and modes
 
@@ -48,14 +48,21 @@ Block goes by the highest reading from any of your sessions in the current week,
 
 |  | Terminal | VS Code |
 | --- | --- | --- |
-| Always on | A status line under the prompt. | A small pane above the chat box. |
-| What it shows | A traffic-light glyph (🟢 on track, 🟡 heads-up, 🔴 over) and the numbers. Three styles: numbers, bar (the default, with a mark for what is allowed by tonight) and minimal. | The summary as the pane's title, with one bar for the week. Each day is as wide as its share of the plan, today is highlighted, and a marker shows what is allowed by tonight. |
-| Details and settings | `/budget` and `/budget-config` open panes. Nothing opens by itself. | The same commands, with real dropdowns and fields. |
-| Making it smaller | Pick the minimal style. | Close the pane with its X, and it stays closed for that chat. Or turn it off in `/budget-config`. |
+| Always on | A status line under the prompt. | One panel above the chat box. It opens by itself when a chat starts. |
+| What it shows | A traffic-light glyph (🟢 on track, 🟡 heads-up, 🔴 over) and the numbers. Three styles: numbers, bar (the default, with a mark for what is allowed by tonight) and minimal. | The summary as the panel's title, with one bar for the week. Each day is as wide as its share of the plan, today is highlighted, and a marker shows what is allowed by tonight. Under the bar, the details. |
+| Details and settings | `/budget` and `/budget-config` open panes. Nothing opens by itself. | `/budget` opens the panel, and `/budget-config` the settings, with real dropdowns and fields. |
+| Making it smaller | Pick the minimal style. | Keep the compact view, or close the panel with its X, and it stays closed for that chat until you run `/budget`. |
 
-Claude Code draws the status line itself: it puts "⚠ weekly-budget:" in front and decides the colour, which is why the glyph carries the state. In VS Code the plugin shows the pane and no status line.
+Claude Code draws the status line itself: it puts "⚠ weekly-budget:" in front and decides the colour, which is why the glyph carries the state. In VS Code the plugin shows the panel and no status line.
 
-The figures come from the usage Claude Code reports after each response. Before your first response in a new session, the plugin uses the highest reading another of your sessions reported in the same week. If there is none, it says "no reading yet". A reading over 15 minutes old is shown as last known everywhere: the status line and the VS Code pane's title end with "as of 14:00" ("as of Tue 14:00" when it is from an earlier day), and `/budget` says "Last known, as of 14:00". A re-warn notification or a block reason built on such a reading ends with the same mark. Usage on claude.ai or the mobile app shows up after your next response in Claude Code.
+**The VS Code panel has two views**, which you choose with **Compact panel (VS Code)** in `/budget-config`:
+
+- **On (the default): the compact view.** The bar, with a "▸ Details" row under it. Click the row and the details open below the bar, and it reads "▾ Details". Click it again to fold them away.
+- **Off: the full view.** The bar with the details always shown, and no toggle.
+
+The details are used, allowed by tonight, today's balance, when the week resets, your plan, the mode, and the snooze state with its buttons. Changing the view never closes the panel, and keeps what you opened with the toggle. The terminal is unchanged: `/budget` opens the details pane, and no panel opens by itself.
+
+The figures come from the usage Claude Code reports after each response. Before your first response in a new session, the plugin uses the highest reading another of your sessions reported in the same week. If there is none, it says "no reading yet". A reading over 15 minutes old is shown as last known everywhere: the status line and the VS Code panel's title end with "as of 14:00" ("as of Tue 14:00" when it is from an earlier day), and the details say "Last known, as of 14:00". A re-warn notification or a block reason built on such a reading ends with the same mark. Usage on claude.ai or the mobile app shows up after your next response in Claude Code.
 
 ## Requirements
 
