@@ -32,7 +32,7 @@ You choose one mode in `/budget-config`:
 - **Re-warn.** A notification on every message you send while you are over.
 - **Block.** Your next message is held back, and so is each one after it while you are over. The text goes back into the prompt box so you lose nothing. A task that is already running finishes, and tool calls are never blocked.
 
-Re-warn and block act only on messages you send yourself while no task is running. Automated and agent messages pass through untouched: background task notifications, scheduled and `/loop` prompts, messages from other sessions or plugins, and anything delivered into a task that is already running, a message you type while it runs included.
+Re-warn and block act only on messages you send yourself. A message you type while Claude is working passes, but one you queue to run next (`ctrl+x enter` by default) is held back like any other next message. Automated and agent messages pass through untouched: background task notifications, scheduled and `/loop` prompts, messages from other sessions or plugins, and `claude -p` and Agent SDK runs.
 
 There is also an early **heads-up** for when little of today is left. By default it fires when 25% of today's share is left. You can pick 10%, 25% or 50%, or turn it off.
 
@@ -42,7 +42,7 @@ To get past a warning or a block, snooze. A snooze silences warnings and lets me
 
 To keep it quiet, the heads-up and the over warning each fire at most once per local day, across all your sessions. Re-warn is the one exception, because you asked for repetition.
 
-Block goes by the latest reading from any of your sessions in the current week, so the first message of a new chat is held back too. It lets messages through when there is no reading for this week yet, or if the plugin itself fails.
+Block goes by the highest reading from any of your sessions in the current week, so the first message of a new chat is held back too. It lets messages through when there is no reading for this week yet, or if the plugin itself fails.
 
 ## Terminal and VS Code
 
@@ -55,7 +55,7 @@ Block goes by the latest reading from any of your sessions in the current week, 
 
 Claude Code draws the status line itself: it puts "⚠ weekly-budget:" in front and decides the colour, which is why the glyph carries the state. In VS Code the plugin shows the pane and no status line.
 
-The figures come from the usage Claude Code reports after each response. Before your first response in a new session, the plugin uses the latest reading from another of your sessions in the same week. If there is none, it says "no reading yet". A reading over 15 minutes old is shown as last known everywhere: the status line and the VS Code pane's title end with "as of 14:00" ("as of Tue 14:00" when it is from an earlier day), and `/budget` says "Last known, as of 14:00". Usage on claude.ai or the mobile app shows up after your next response in Claude Code.
+The figures come from the usage Claude Code reports after each response. Before your first response in a new session, the plugin uses the highest reading another of your sessions reported in the same week. If there is none, it says "no reading yet". A reading over 15 minutes old is shown as last known everywhere: the status line and the VS Code pane's title end with "as of 14:00" ("as of Tue 14:00" when it is from an earlier day), and `/budget` says "Last known, as of 14:00". A re-warn notification or a block reason built on such a reading ends with the same mark. Usage on claude.ai or the mobile app shows up after your next response in Claude Code.
 
 ## Requirements
 
@@ -69,7 +69,7 @@ The plugin does not run, or draws nothing, in these cases:
 - `claude --safe-mode` and `claude --bare`
 - `disableAllHooks` in your settings
 - an administrator's `allowManagedModsOnly` policy
-- `claude -p` (print mode): hooks run, but nothing is drawn
+- `claude -p` (print mode) and Agent SDK runs: hooks run, but nothing is drawn and no message is held back
 
 ## Install
 
