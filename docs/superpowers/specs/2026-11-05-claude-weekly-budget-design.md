@@ -32,7 +32,7 @@ These are the builder's calls unless marked otherwise.
 
 - **Warnings popping up too often.** This is the user's stated reason they'd uninstall it. See the anti-noise rules in §8.
 - **Interrupting a running task.** Block mode only holds back the *next* message (user's decision).
-- Reopening a panel the user just closed (builder's call).
+- Reopening a panel the user just closed (builder's call). Only the user's own `/budget` reopens it.
 - Showing a stale number as if it were live (builder's call).
 
 ## 5. Platform facts this design rests on
@@ -119,6 +119,20 @@ These come from research of the docs and a working spike on Claude Code CLI **2.
 - When a new week starts, or the reset comes early, recompute everything from the new `resetsAt` and **reset the warning ledger** (§8).
 - One unverified report says weekly resets sometimes arrive after about 72h. The design must not assume 7 days elapse.
 
+### Leftover: Fixed or Adaptive (added 2026-11-05, user-approved)
+
+- A setting, **Leftover**, with two values. The stored field is `leftover`, defaulting to `'fixed'`, in config `version: 1`.
+  - **Fixed** is everything above: "allowed by tonight" is the plan's cumulative share up to the end of today, so a day's leftover or overuse lands on the next day.
+  - **Adaptive**: pinned days keep their planned share. What is left of the week, `planTotal − usedAtDayStart − pinned shares still ahead`, floored at 0, is shared over the unpinned days still ahead, today included, in proportion to their planned shares.
+- Under Adaptive:
+  - "Allowed by tonight" is `usedAtDayStart + today's adapted share`.
+  - The days gone by become one stretch, scaled to `usedAtDayStart`, so the pieces still add up and the marker ends at today.
+  - With no unpinned day ahead, it is the same as Fixed.
+- **`usedAtDayStart`** is what had been used when today began. It is fixed for the day, so "left today" doesn't shrink while you work.
+  - It is kept in `$.store` under `dayStart` (`{ weekKey, dayKey, percentUsed }`), shared by every session.
+  - The first fresh reading of a day records it, from the last same-window reading of an earlier day, or 0 when the week began today, or the reading itself.
+  - Without a record for today, the reading itself stands in.
+
 ## 7. Display (decided)
 
 ### Terminal
@@ -133,9 +147,9 @@ These come from research of the docs and a working spike on Claude Code CLI **2.
 ### VS Code
 
 - **No text status line.** It is suppressed when the session's surfaces don't include `terminal`.
-- **A compact panel above the chat box**, opened automatically at session start:
+- **One panel above the chat box**, opened automatically at session start, with a **compact** or a **full** view (the user's decision on 2026-11-05, after the live check; it replaces the first design, which had a compact pane and a separate details pane in VS Code):
   - **Title** (in the host-drawn header): the summary. Example: `🟢 12% of 28.6% · 16.6% left today`, with 🟢/🟡/🔴 for state.
-  - **Body:** only a thin SVG bar, measured in % of the week.
+  - **Body:** a thin SVG bar, measured in % of the week, with the details under it (see "Views" below).
     - **Each day's segment is as wide as its share of the plan** (user's decision, option B). This is not equal time per day. Weekdays at 18% are wide and weekend days at 5% are thin, so the bar shows the plan itself. The "allowed by tonight" marker always lands at the **end of today's segment**.
     - **Segments follow the window's calendar-day pieces in order.** A Tue 20:00 → Tue 20:00 window gives 8 pieces: a short partial Tuesday, six full days, and a long partial Tuesday. Each piece is as wide as its prorated share (§6).
     - Each segment is labelled with its weekday name (Wed, Thu, …). The label is **left out when the segment is too narrow** for it, for example the short partial Tuesday or a ~2% day. A **0% day has no segment.** This is the builder's call.
@@ -149,26 +163,33 @@ These come from research of the docs and a working spike on Claude Code CLI **2.
     - labels in a warm mid-grey `#9A958A`, today's label in Claude orange
   - The SVG is drawn as an image and can't follow VS Code's theme. The colours must read on both dark and light themes.
   - In panels, `Text` uses theme keys (`claude`, `success`, `warning`, `error`) so it follows Claude's theme on each surface.
-  - **No expand/▾ button, and no other controls** (the user's decision). Details and settings live behind the commands.
-  - Ask for a small inline height of about 2 rows.
-  - Update the title whenever the numbers change, but **only if the pane is still open** (check `$.ui.panes()`). Never reopen a pane the user closed during that session.
-  - Settings include an option to turn the compact panel off (builder's call).
+  - **Views.** The stored setting `showCompactPanel` (config `version: 1`, kept for compatibility) now picks the view, not whether the panel shows. In `/budget-config` it is "Compact panel (VS Code)", on or off:
+    - **Compact (on, the default):** the bar, with a **collapsed "▸ Details" row** under it. Clicking it opens the details below the bar and the label becomes "▾ Details"; clicking again folds them away. The toggle's state is per session (`detailsExpanded`) and survives a change of view.
+    - **Full (off):** the bar with the details always shown, and no toggle.
+    - **The details** are what the terminal's details pane shows, from one shared renderer: used, allowed by tonight and the coloured today line, the reset line, the plan, the mode, and the snooze line with its buttons (snooze options, snooze today, Resume). A last-known reading is marked as it is everywhere else.
+  - This **supersedes the earlier "no expand/▾ button, and no other controls" line**: the user decided on 2026-11-05 to have the toggle and the details in the panel.
+  - **Height:** the panel asks for `rows: 4` in the compact view while collapsed (the bar, a gap and the toggle row), and `rows: 18` when expanded or in the full view (17 before the details gained the Leftover line). These are counted from the layout and are to be tuned by eye in VS Code (R32, revising R30). A change of the toggle or of the view asks again with the new height, under the same title. The plugin keeps the rows it last asked for, because the engine's pane list has none, and asks again on the next refresh if the view was changed from another session (R33).
+  - **Opening:** the panel opens once per session on any surface but the terminal, in either view. Switching the view never closes it, and never reopens one the user closed.
+  - Update the title whenever the numbers change, but **only if the panel is still open** (check `$.ui.panes()`). Never reopen a panel the user closed during that session by itself: ✕ closes it for the chat, and only `/budget` brings it back.
 
 ### Commands (both surfaces)
 
-- **`/budget`:** opens the **details panel**, containing:
-  - used %, allowed by tonight, today left/over
-  - reset time (local time plus a countdown)
-  - a plan summary
-  - the current mode
-  - snooze state, with snooze buttons: 1h, rest of today, resume
+- **`/budget`:**
+  - **In VS Code** (any surface but the terminal is attached): opens the **one panel** (the `compact` pane) in whichever view is set, even after the user closed it, and counts as the session's open. It answers "Budget panel opened."
+  - **In a terminal:** opens the **details pane**, which has the bar (as text) and the details, and answers "Budget details opened." Nothing else opens by itself there.
+  - The details are:
+    - used %, allowed by tonight, today left/over
+    - reset time (local time plus a countdown)
+    - a plan summary
+    - the current mode
+    - snooze state, with snooze buttons: the configured options, rest of today, resume
 - **`/budget-config`:** opens the **settings panel**, containing:
   - plan editor: pin days or groups, see the computed per-day shares
   - mode: warn / re-warn / block
   - heads-up threshold, or off
   - status line style: A / B / C
   - snooze durations offered
-  - show or hide the VS Code compact panel
+  - the VS Code panel's view: compact or full
 - **`/budget snooze <duration>`** and **`/budget snooze off`:** typed shortcuts, so the user can snooze straight after a warning or a block without opening a panel.
 - Exact command names are the builder's call, as long as they don't collide with built-ins. Panels use real `Input`/`Select` controls in VS Code and their terminal equivalents in the terminal.
 
@@ -211,7 +232,7 @@ Screenshots of the spike panel were reviewed in the conversation.
 ### Block without a fresh reading (builder's call)
 
 - Every new chat starts with no reading of its own. If block mode only trusted a session's own reading, the first message of every new VS Code chat would get through. That defeats the point of block.
-- So block decides on the **latest reading shared in `$.store` by any session**, as long as it is for the **current window**: its `resetsAt` is still in the future. Within a window, usage only goes up, so an older reading is a safe lower bound.
+- So block decides on the **highest reading in the current week** shared in `$.store` by any session, as long as it is for the **current window**: its `resetsAt` is still in the future. Within a window, usage only goes up, so an older reading is a safe lower bound.
 - Block **fails open** only when no reading exists for the current window, or the plugin errors. A guard's `.catch` lets the message through.
 - If an early reset (§6) goes unnoticed because nothing is getting through, snooze is the way out. The block reason says so.
 - `/budget…` commands are never blocked.
@@ -220,7 +241,16 @@ Screenshots of the spike panel were reviewed in the conversation.
 
 ### Timing caveat
 
-The reading reflects the state after the last response. That means block decides on the next message using the latest reading, and that is acceptable.
+The reading reflects the state after the last response. That means block decides on the next message using the highest reading in the current week, and that is acceptable.
+
+### Rulings made during the build (R19–R24)
+
+- **R19:** only a prompt a person can be behind is gated (block or re-warn): an absent origin, or `composer`, `bridge`, `slack-ping`, `sdk` or `unclassified`; not `isMeta`; not a `/budget…` command; and not one delivered into a running turn. Every agent and automation kind passes.
+- **R20:** the stale mark is ` · as of HH:MM` for a reading from today, and ` · as of Tue HH:MM` (a three-letter weekday) for one from an earlier day. The status line and the panel title both use it.
+- **R21:** a message the person types while a turn is running is never held back, because it joins the running task, which must finish. Only the next message after the turn is gated.
+- **R22:** "over" is decided at the reading's precision: `left < -0.05`, half the 0.1 display unit. Between -0.05 and 0 it reads "0% left today".
+- **R23 (revises R19):** `sdk` and `unclassified` prompts are gated only when `$.session.surfaces()` is non-empty, so a plain `claude -p` run, which has none, always passes, and VS Code, which attaches `vscode`, is still held back.
+- **R24 (refines R21):** a prompt with `turnId` set and `wait === true` is queued to run as the next turn, so it is "the next message" and is gated like any other. A plain mid-turn message passes.
 
 ## 9. State and storage
 
@@ -229,7 +259,7 @@ The reading reflects the state after the last response. That means block decides
   - snooze-until
   - warning ledger
   - the last known reading with its timestamp, so a new session can show "last known: 12% at 10:44" (dimmed) before its first response
-- **`$.state`** / atoms (per session): the current reading and the panels' view state.
+- **`$.state`** / atoms (per session): the current reading, the settings pane's state, whether this session has opened the VS Code panel, and whether its compact view has its details open.
 - Concurrent sessions race on the ledger, and a rare duplicate toast is acceptable. Writes should be re-read-then-write to keep this small.
 
 ## 10. Edge cases
