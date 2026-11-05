@@ -27,18 +27,29 @@ import type { Gate, Toast } from './lib/warnings'
 // This session's own state. The store is the truth shared by every session, and
 // the panes draw from it; what is kept here is only this session's: the reading it
 // measured itself (never one another session shared), and the settings pane's and
-// the compact pane's own state.
+// the panel's own state.
 export const readingAtom = atom({ plugin: 'weekly-budget', key: 'reading' } as const, null)
 export const settingsErrorAtom = atom({ plugin: 'weekly-budget', key: 'settingsError' } as const, null)
 export const pinDraftDaysAtom = atom({ plugin: 'weekly-budget', key: 'pinDraftDays' } as const, 'weekend')
 export const compactOpenedAtom = atom({ plugin: 'weekly-budget', key: 'compactOpened' } as const, false)
+export const detailsExpandedAtom = atom({ plugin: 'weekly-budget', key: 'detailsExpanded' } as const, false)
 
+// VS Code's one panel. Its height is what it is asked for, in rows: the bar and the
+// toggle row while the compact view is collapsed, the bar with the details otherwise.
 const COMPACT = 'compact'
-// Titled with the summary, marked "as of" when the reading is last known.
-const compactPane = (v: { budget: Budget | null; staleSince: number | null; tz: Tz; now: number }) => ({
+const COLLAPSED_ROWS = 3
+const EXPANDED_ROWS = 12
+
+// The panel as an open request. Titled with the summary, marked "as of" when the
+// reading is last known. The compact view (showCompactPanel) keeps its details
+// behind the toggle; the full view always shows them.
+const compactPane = (
+  v: { cfg: Config; budget: Budget | null; staleSince: number | null; tz: Tz; now: number },
+  isExpanded: boolean,
+) => ({
   id: COMPACT,
   title: paneTitle(v.budget, v.staleSince, v.tz, v.now),
-  rows: 2,
+  rows: v.cfg.showCompactPanel && !isExpanded ? COLLAPSED_ROWS : EXPANDED_ROWS,
 })
 
 const USAGE = 'Usage: /budget, /budget snooze 30m|1h|today|off'
@@ -98,31 +109,52 @@ export async function refresh($: EngineInterface): Promise<void> {
   $.ui.invalidate('ui.render')
 }
 
-// The compact pane above the VS Code chat: the summary is its title, and the host
-// draws that, so a changed title is a new open (which retitles). The panes the
-// engine lists are the ones still up: one the person closed is not there, and
-// stays closed. One the config now switches off is closed.
+// The panel above the VS Code chat: the summary is its title, and the host draws
+// that, so a changed title is a new open (which retitles). The panes the engine
+// lists are the ones still up: one the person closed is not there, and stays closed.
+// Neither view closes it.
 async function syncCompact(
   $: EngineInterface,
   view: { cfg: Config; budget: Budget | null; staleSince: number | null; tz: Tz; now: number },
 ): Promise<void> {
   const pane = (await $.ui.panes()).find(p => p.id === COMPACT)
   if (pane === undefined) return
-  const wanted = compactPane(view)
-  if (!view.cfg.showCompactPanel) await $.ui.close({ id: COMPACT })
-  else if (pane.title !== wanted.title) await $.ui.open(wanted)
+  const wanted = compactPane(view, await read($, detailsExpandedAtom))
+  if (pane.title !== wanted.title) await $.ui.open(wanted)
 }
 
-// Opens the compact pane the first time a session has somewhere to draw it: any
-// surface but the terminal, which has the status line. Once a session has opened
-// it, it never does again, so a pane the person closed stays closed.
+// The panel as the store, the view and the toggle have it now.
+async function currentCompactPane($: EngineInterface) {
+  const [view, isExpanded] = await Promise.all([loadView($), read($, detailsExpandedAtom)])
+  return compactPane(view, isExpanded)
+}
+
+// Opens the panel, and notes that this session has.
+async function openCompact($: EngineInterface): Promise<void> {
+  await $.ui.open(await currentCompactPane($))
+  await update($, compactOpenedAtom, () => true)
+}
+
+// Opens the panel the first time a session has somewhere to draw it: any surface
+// but the terminal, which has the status line. In either view. Once a session has
+// opened it, it never does again, so a pane the person closed stays closed; only
+// /budget brings it back.
 export async function ensureCompact($: EngineInterface): Promise<void> {
   if (await read($, compactOpenedAtom)) return
   if (!(await $.session.surfaces()).some(s => s !== 'terminal')) return
-  const view = await loadView($)
-  if (!view.cfg.showCompactPanel) return
-  await $.ui.open(compactPane(view))
-  await update($, compactOpenedAtom, () => true)
+  await openCompact($)
+}
+
+// The Details toggle of the compact view: opens or closes the details under the bar.
+// The panel is asked again, for the rows the new state needs, under the title it has.
+export async function toggleDetails($: EngineInterface): Promise<void> {
+  const isExpanded = !(await read($, detailsExpandedAtom))
+  await update($, detailsExpandedAtom, () => isExpanded)
+  await $.ui.open(await currentCompactPane($))
+}
+
+export async function getDetailsExpanded($: EngineInterface): Promise<boolean> {
+  return read($, detailsExpandedAtom)
 }
 
 // For a refresh nobody awaits (the session start, the minute tick): a failing
@@ -178,15 +210,13 @@ export async function applyConfig($: EngineInterface, next: Config): Promise<str
   return null
 }
 
-// The compact pane's switch: off closes the pane, on opens it again even if it was
-// closed earlier this session, which is why that is forgotten first.
-export async function applyCompactPanel($: EngineInterface, isOn: boolean): Promise<void> {
-  // Closed before the refresh, so that it finds no pane left to close.
-  if (!isOn) await $.ui.close({ id: COMPACT })
-  const error = await applyConfig($, { ...(await loadConfig($)), showCompactPanel: isOn })
-  if (!isOn || error !== null) return
-  await update($, compactOpenedAtom, () => false)
-  await ensureCompact($)
+// The panel's switch between its two views: compact (on) or full (off). It closes
+// nothing and opens nothing the person closed; a panel that is up is asked again, for
+// the rows of the view it is in now. What the toggle opened stays opened.
+export async function applyCompactPanel($: EngineInterface, isCompact: boolean): Promise<void> {
+  const error = await applyConfig($, { ...(await loadConfig($)), showCompactPanel: isCompact })
+  if (error !== null) return
+  if ((await $.ui.panes()).some(p => p.id === COMPACT)) await $.ui.open(await currentCompactPane($))
 }
 
 // The reading a measure brings. Its rate limits are the last response's: a measure
@@ -258,11 +288,17 @@ export async function showToast($: EngineInterface, toast: Toast): Promise<void>
   if (budget !== null) await $.ui.toast(toastText(toast, budget, staleMark(staleSince, tz, now)))
 }
 
-// /budget opens the details; /budget snooze <span> silences warnings and lets
-// messages through. The reply is what the command prints.
+// /budget opens the panel where there is one (any surface but the terminal), even
+// after the person closed it, and the details pane in a terminal; /budget snooze
+// <span> silences warnings and lets messages through. The reply is what the
+// command prints.
 export async function runBudgetCommand($: EngineInterface, args: string): Promise<string> {
   const text = args.trim().toLowerCase()
   if (text === '') {
+    if ((await $.session.surfaces()).some(s => s !== 'terminal')) {
+      await openCompact($)
+      return 'Budget panel opened.'
+    }
     await $.ui.open({ id: 'details', title: 'Weekly budget' })
     return 'Budget details opened.'
   }

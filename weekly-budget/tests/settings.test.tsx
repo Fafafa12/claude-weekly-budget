@@ -281,16 +281,28 @@ for (const surface of SURFACES) {
     })
   }
 
-  test(`compact off closes the pane on ${surface}`, { plugins: [probe] }, async ($, on) => {
-    const { calls } = engine(on)
+  const switching = `compact off keeps the pane up and re-opens it in the full view on ${surface}`
+  test(switching, { plugins: [probe] }, async ($, on) => {
+    const { calls, clock, state } = engine(on, { surfaces: ['vscode'], store: { lastReading: reading(33) } })
+    await start($, clock, 'vscode')
+    expect(calls.opens).toEqual([{ id: 'compact', title: expect.any(String), rows: 3 }])
     const ui = await $.ui.mount({ ...PANE, surface })
     expect((await ui.find({ key: 'compact-panel' }))?.props.value).toBe('on')
 
     await ui.select({ key: 'compact-panel', value: 'off' })
 
     expect((await storedConfig($)).showCompactPanel).toBe(false)
-    expect(calls.closes).toEqual(['compact'])
+    expect(calls.closes).toEqual([])
+    expect(state.panes.map(p => p.id)).toEqual(['compact'])
+    expect(calls.opens).toHaveLength(2)
+    expect(calls.opens.at(-1)).toMatchObject({ id: 'compact', rows: 12 })
     expect((await ui.find({ key: 'compact-panel' }))?.props.value).toBe('off')
+
+    await ui.select({ key: 'compact-panel', value: 'on' })
+
+    expect((await storedConfig($)).showCompactPanel).toBe(true)
+    expect(calls.closes).toEqual([])
+    expect(calls.opens.at(-1)).toMatchObject({ id: 'compact', rows: 3 })
     await ui.unmount()
   })
 }
@@ -461,18 +473,31 @@ test('no such note while the unpinned days still have a share to split', async (
   await ui.unmount()
 })
 
-test('switching the panel back on reopens it, even if it was closed this session', async ($, on) => {
-  const { calls, clock } = engine(on, { surfaces: ['vscode'], store: { lastReading: reading(33) } })
+// ✕ closes the panel for the chat; only /budget brings it back.
+test('switching the view does not reopen a pane the person closed', async ($, on) => {
+  const { calls, clock, state } = engine(on, { surfaces: ['vscode'], store: { lastReading: reading(33) } })
   await start($, clock, 'vscode')
   expect(calls.opens.map(o => o.id)).toEqual(['compact'])
+  state.panes = []
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
 
   await ui.select({ key: 'compact-panel', value: 'off' })
-  expect(calls.closes).toEqual(['compact'])
   await ui.select({ key: 'compact-panel', value: 'on' })
 
-  expect(calls.opens.map(o => o.id)).toEqual(['compact', 'compact'])
-  expect(calls.closes).toEqual(['compact'])
+  expect(calls.opens.map(o => o.id)).toEqual(['compact'])
+  expect(calls.closes).toEqual([])
+  expect(state.panes).toEqual([])
+  await ui.unmount()
+})
+
+test('switching the view with no pane up opens nothing', async ($, on) => {
+  const { calls } = engine(on, { surfaces: ['vscode'] })
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+
+  await ui.select({ key: 'compact-panel', value: 'off' })
+
+  expect(calls.opens).toEqual([])
+  expect(calls.closes).toEqual([])
   await ui.unmount()
 })
 

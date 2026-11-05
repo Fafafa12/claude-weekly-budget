@@ -1,17 +1,30 @@
 import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 
-import { currentBudget } from '../controller'
+import { currentBudget, getDetailsExpanded, toggleDetails } from '../controller'
+import { renderDetailsBody } from './details-body'
 import { NO_READING_TEXT, renderBar } from './shared'
 
-// The body of the compact pane: the bar and nothing else. The host draws the
-// summary as the pane's title, so there is no text to repeat, and no button: the
-// pane is read at a glance and closed with the host's own mark.
+// The body of VS Code's one panel: the bar, and the details under it. The host draws
+// the summary as the pane's title, so there is none to repeat. In the compact view
+// the details are behind a toggle row, which opens them below it and closes them
+// again; in the full view they are always there, and there is no toggle.
 export async function renderCompact($: EngineInterface, e: RenderInput<'Pane'>): Promise<RenderElement> {
-  const { budget, staleSince, tz, now } = await currentBudget($)
-  if (budget === null) {
-    const { Text } = $.ui.resolve(e)
-    return <Text dimColor>{NO_READING_TEXT}</Text>
-  }
+  const { Box, Button, Text } = $.ui.resolve(e)
+  const [view, isExpanded] = await Promise.all([currentBudget($), getDetailsExpanded($)])
+  const { budget, staleSince, cfg, tz, now } = view
+  const isCompact = cfg.showCompactPanel
 
-  return renderBar($, e, budget, { staleSince, tz, now })
+  return (
+    <Box flexDirection="column" gap={1}>
+      {budget === null ? <Text dimColor>{NO_READING_TEXT}</Text> : renderBar($, e, budget, { staleSince, tz, now })}
+      {isCompact && (
+        <Button
+          key="details-toggle"
+          label={isExpanded ? '▾ Details' : '▸ Details'}
+          onPress={() => toggleDetails($)}
+        />
+      )}
+      {(!isCompact || isExpanded) && renderDetailsBody($, e, view)}
+    </Box>
+  )
 }

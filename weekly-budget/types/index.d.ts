@@ -24,7 +24,8 @@ declare module 'claude-code' {
       reading: Reading | null // this session's own measured reading; the store holds the shared one
       settingsError: string | null
       pinDraftDays: string
-      compactOpened: boolean // this session has opened the compact pane, so it never reopens one the person closed
+      compactOpened: boolean // this session has opened VS Code's panel, so it never reopens one the person closed
+      detailsExpanded: boolean // the panel's compact view shows its details under the bar (the toggle's state)
     }
   }
 }

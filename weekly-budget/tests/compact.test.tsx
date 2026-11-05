@@ -45,7 +45,25 @@ const put = ($: Engine, key: string, value: unknown) =>
     presentation: { isFullscreen: false, columns: 80 },
   })
 
+// The same for reading: `probe <key>` answers what is stored.
+const probe: Plugin = {
+  name: 'store-probe',
+  register(on) {
+    on('command.run', { command: 'probe' }, async ($, e) => ({
+      text: JSON.stringify((await $.store.get(e.args)) ?? null),
+    }))
+  },
+}
+const run = ($: Engine, command: string, args = '') =>
+  $.command.run({ command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+const stored = async ($: Engine, key: string): Promise<unknown> =>
+  JSON.parse((await run($, 'probe', key)).text ?? 'null')
+
 type Calls = { opens: PaneOpenArgs[]; closes: string[] }
+
+// The panel's two heights: the bar and the toggle row, or the bar with the details.
+const COLLAPSED_ROWS = 3
+const EXPANDED_ROWS = 12
 
 // Everything beneath the plugin: the clock, environment and store, and an engine
 // that keeps its panes as the real one does, so that a pane the test closes is gone
@@ -63,7 +81,7 @@ function engine(
   on('session.surfaces', () => ({ value: state.surfaces }))
   on('ui.status', () => ({ value: undefined }))
   on('ui.toast', () => ({ value: undefined }))
-  on('ui.invalidate', () => ({ value: undefined }))
+  on('ui.invalidate', (_, e, next) => next(e))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.open', (_, e) => {
     calls.opens.push(e)
@@ -104,8 +122,13 @@ const PANE = {
   },
 } as const
 const withColumns = (bodyColumns: number) => ({ ...PANE, props: { ...PANE.props, bodyColumns } })
+const SETTINGS = {
+  ...PANE,
+  requestId: 'settings',
+  props: { ...PANE.props, title: 'Weekly budget settings', placement: 'dock' },
+} as const
 
-test('vscode draws one Svg and no Button', async ($, on) => {
+test('compact view, collapsed: the bar and one Details toggle, no numbers', async ($, on) => {
   engine(on, { store: { config: pinned, lastReading: reading(33) } })
 
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
@@ -114,7 +137,105 @@ test('vscode draws one Svg and no Button', async ($, on) => {
   expect(bars).toHaveLength(1)
   expect(bars[0]?.props).toMatchObject({ alt: '🟢 33% of 39% · 6% left today', width: 456, height: 34 })
   expect(String(bars[0]?.props.source)).toStartWith('<svg xmlns="http://www.w3.org/2000/svg"')
-  expect(await ui.findAll({ type: 'Button' })).toEqual([])
+  const buttons = await ui.findAll({ type: 'Button' })
+  expect(buttons.map(b => [b.key, b.props.label])).toEqual([['details-toggle', '▸ Details']])
+  expect(await ui.find({ type: 'Text', text: /Used 33%/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Plan:|Mode:|Warnings/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('the toggle expands the details under the bar, and collapses them again', async ($, on) => {
+  const { calls } = engine(on, { store: { config: pinned, lastReading: reading(33) } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+
+  await ui.press({ key: 'details-toggle' })
+
+  expect((await ui.find({ type: 'Text', text: /Used 33%/ }))?.text).toBe('Used 33%')
+  expect((await ui.find({ type: 'Text', text: /Allowed by tonight/ }))?.text).toBe('Allowed by tonight 39%')
+  const today = await ui.find({ type: 'Text', text: /left today/ })
+  expect(today?.text).toBe('6% left today')
+  expect(today?.props.color).toBe('success')
+  const resets = await ui.find({ type: 'Text', text: /Resets/ })
+  expect(resets?.text).toBe('Resets Tue 20:00 (in 5d 5h)')
+  expect(resets?.props.color).toBe('claude')
+  expect((await ui.find({ type: 'Text', text: /Plan:/ }))?.text).toBe(
+    'Plan: Mon 18 · Tue 18 · Wed 18 · Thu 18 · Fri 18 · Sat 5 · Sun 5',
+  )
+  expect((await ui.find({ type: 'Text', text: /Mode:/ }))?.text).toBe('Mode: warn')
+  expect((await ui.find({ type: 'Text', text: /Warnings/ }))?.text).toBe('Warnings on')
+  expect((await ui.find({ key: 'snooze-60' }))?.props.label).toBe('Snooze 1h')
+  expect((await ui.find({ key: 'snooze-today' }))?.props.label).toBe('Snooze today')
+  expect(await ui.find({ key: 'resume' })).toBeUndefined()
+  expect((await ui.find({ key: 'details-toggle' }))?.props.label).toBe('▾ Details')
+  expect(await ui.findAll({ type: 'Svg' })).toHaveLength(1)
+  expect(calls.opens).toEqual([{ id: 'compact', title: titleAt(33), rows: EXPANDED_ROWS }])
+
+  await ui.press({ key: 'details-toggle' })
+
+  expect(await ui.find({ type: 'Text', text: /Used 33%/ })).toBeUndefined()
+  expect(await ui.find({ key: 'snooze-60' })).toBeUndefined()
+  expect((await ui.find({ key: 'details-toggle' }))?.props.label).toBe('▸ Details')
+  expect(calls.opens.at(-1)).toEqual({ id: 'compact', title: titleAt(33), rows: COLLAPSED_ROWS })
+  expect(calls.opens).toHaveLength(2)
+  await ui.unmount()
+})
+
+test('the toggle re-opens the pane under the title it has, last-known mark included', async ($, on) => {
+  const { calls } = engine(on, { store: { config: pinned, lastReading: reading(33, now - HOUR_MS) } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+
+  await ui.press({ key: 'details-toggle' })
+
+  expect(calls.opens).toEqual([
+    { id: 'compact', title: '🟢 33% of 39% · 6% left today · as of 14:00', rows: EXPANDED_ROWS },
+  ])
+  expect((await ui.find({ type: 'Text', text: /Last known/ }))?.text).toBe('Last known, as of 14:00')
+  await ui.unmount()
+})
+
+test('a snooze from the expanded pane is stored, and Resume appears', { plugins: [probe] }, async ($, on) => {
+  engine(on, { store: { config: pinned, lastReading: reading(33) } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await ui.press({ key: 'details-toggle' })
+  expect(await ui.find({ key: 'resume' })).toBeUndefined()
+
+  await ui.press({ key: 'snooze-60' })
+
+  expect(await stored($, 'snooze')).toEqual({ until: now + HOUR_MS })
+  expect((await ui.find({ type: 'Text', text: /Warnings/ }))?.text).toBe('Warnings snoozed until 16:00')
+  expect((await ui.find({ key: 'resume' }))?.props.label).toBe('Resume')
+
+  await ui.press({ key: 'resume' })
+
+  expect(await stored($, 'snooze')).toEqual({ until: null })
+  expect(await ui.find({ key: 'resume' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('full view: the bar and the details, with no toggle', async ($, on) => {
+  engine(on, { store: { config: { ...pinned, showCompactPanel: false }, lastReading: reading(33) } })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+
+  expect(await ui.findAll({ type: 'Svg' })).toHaveLength(1)
+  expect((await ui.find({ type: 'Text', text: /Used 33%/ }))?.text).toBe('Used 33%')
+  expect((await ui.find({ type: 'Text', text: /Plan:/ }))?.text).toContain('Sat 5 · Sun 5')
+  expect((await ui.find({ type: 'Text', text: /Mode:/ }))?.text).toBe('Mode: warn')
+  expect((await ui.find({ key: 'snooze-today' }))?.props.label).toBe('Snooze today')
+  expect(await ui.find({ key: 'details-toggle' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('full view with a stale reading marks it last known', async ($, on) => {
+  engine(on, {
+    store: { config: { ...pinned, showCompactPanel: false }, lastReading: reading(33, now - HOUR_MS) },
+  })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+
+  const mark = await ui.find({ type: 'Text', text: /Last known/ })
+  expect(mark?.text).toBe('Last known, as of 14:00')
+  expect(mark?.props.dimColor).toBe(true)
   await ui.unmount()
 })
 
@@ -142,7 +263,22 @@ test('no reading text', async ($, on) => {
     'No weekly reading yet — send a message.',
   )
   expect(await ui.findAll({ type: 'Svg' })).toEqual([])
-  expect(await ui.findAll({ type: 'Button' })).toEqual([])
+  expect((await ui.findAll({ type: 'Button' })).map(b => b.key)).toEqual(['details-toggle'])
+  await ui.unmount()
+})
+
+test('with no reading the expanded pane still has the plan, the mode and the snooze', async ($, on) => {
+  engine(on, { store: { config: pinned } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+
+  await ui.press({ key: 'details-toggle' })
+
+  expect(await ui.find({ type: 'Text', text: /No weekly reading yet/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /Plan:/ }))?.text).toContain('Sat 5 · Sun 5')
+  expect((await ui.find({ type: 'Text', text: /Mode:/ }))?.text).toBe('Mode: warn')
+  expect((await ui.find({ key: 'snooze-60' }))?.props.label).toBe('Snooze 1h')
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Used|Allowed|Resets/ })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -155,7 +291,7 @@ test('a surface without Svg gets the text bar', async ($, on) => {
   expect(bar?.text).toBe(textBar(33, 39))
   expect(bar?.props.mono).toBe(true)
   expect(await ui.findAll({ type: 'Svg' })).toEqual([])
-  expect(await ui.findAll({ type: 'Button' })).toEqual([])
+  expect((await ui.findAll({ type: 'Button' })).map(b => b.key)).toEqual(['details-toggle'])
   await ui.unmount()
 })
 
@@ -164,7 +300,7 @@ test('opens only off-terminal', async ($, on) => {
 
   await start($, vscode.clock)
 
-  expect(vscode.calls.opens).toEqual([{ id: 'compact', title: '🟢 33% of 39% · 6% left today', rows: 2 }])
+  expect(vscode.calls.opens).toEqual([{ id: 'compact', title: '🟢 33% of 39% · 6% left today', rows: COLLAPSED_ROWS }])
 })
 
 // A reading another session shared an hour ago is last known, not live: the title
@@ -232,7 +368,7 @@ test('opens when the surface attaches after the start', async ($, on) => {
   state.surfaces = ['vscode']
   await $.session.attach({ surface: 'vscode', clientId: 'vscode:default' })
 
-  expect(calls.opens).toEqual([{ id: 'compact', title: titleAt(33), rows: 2 }])
+  expect(calls.opens).toEqual([{ id: 'compact', title: titleAt(33), rows: COLLAPSED_ROWS }])
 })
 
 test('with no reading yet the pane is titled so', async ($, on) => {
@@ -240,7 +376,7 @@ test('with no reading yet the pane is titled so', async ($, on) => {
 
   await start($, clock)
 
-  expect(calls.opens).toEqual([{ id: 'compact', title: 'Weekly budget · no reading yet', rows: 2 }])
+  expect(calls.opens).toEqual([{ id: 'compact', title: 'Weekly budget · no reading yet', rows: COLLAPSED_ROWS }])
 })
 
 test('opens once per session', async ($, on) => {
@@ -281,7 +417,7 @@ test('an open pane is retitled as the budget moves', async ($, on) => {
 
   expect(calls.opens.map(open => open.title)).toEqual([titleAt(33), titleAt(37)])
   expect(titleAt(37)).toStartWith('🟡 37% of 39%')
-  expect(calls.opens[1]).toMatchObject({ id: 'compact', rows: 2 })
+  expect(calls.opens[1]).toMatchObject({ id: 'compact', rows: COLLAPSED_ROWS })
 })
 
 test('an unchanged title is not sent again', async ($, on) => {
@@ -294,7 +430,7 @@ test('an unchanged title is not sent again', async ($, on) => {
   expect(calls.opens).toHaveLength(1)
 })
 
-test('showCompactPanel false: no open', async ($, on) => {
+test('the full view opens by itself too, tall enough for the details', async ($, on) => {
   const { calls, clock } = engine(on, {
     store: { config: { ...pinned, showCompactPanel: false }, lastReading: reading(33) },
     surfaces: ['vscode'],
@@ -304,25 +440,163 @@ test('showCompactPanel false: no open', async ($, on) => {
   await measure($, 33)
   await $.session.attach({ surface: 'vscode', clientId: 'vscode:default' })
 
-  expect(calls.opens).toEqual([])
+  expect(calls.opens).toEqual([{ id: 'compact', title: titleAt(33), rows: EXPANDED_ROWS }])
   expect(calls.closes).toEqual([])
 })
 
-test('switching the panel off closes an open pane', { plugins: [writer] }, async ($, on) => {
+test('the full view stays off the terminal', async ($, on) => {
+  const { calls, clock } = engine(on, {
+    store: { config: { ...pinned, showCompactPanel: false }, lastReading: reading(33) },
+    surfaces: ['terminal'],
+  })
+
+  await start($, clock, 'terminal')
+
+  expect(calls.opens).toEqual([])
+})
+
+test('the full view never reopens a closed pane', async ($, on) => {
+  const { calls, clock, state } = engine(on, {
+    store: { config: { ...pinned, showCompactPanel: false }, lastReading: reading(33) },
+    surfaces: ['vscode'],
+  })
+  await start($, clock)
+
+  state.panes = []
+  await measure($, 37)
+  await $.session.attach({ surface: 'vscode', clientId: 'vscode:default' })
+  await clock.advance(60_000)
+
+  expect(calls.opens).toHaveLength(1)
+})
+
+test('a view set elsewhere does not close an open pane', { plugins: [writer] }, async ($, on) => {
   const { calls, clock, state } = engine(on, {
     store: { config: pinned, lastReading: reading(33) },
     surfaces: ['vscode'],
   })
-
   await start($, clock)
   expect(state.panes.map(p => p.id)).toEqual(['compact'])
 
   await put($, 'config', { ...pinned, showCompactPanel: false })
   await clock.advance(60_000)
 
-  expect(calls.closes).toEqual(['compact'])
-  expect(state.panes).toEqual([])
+  expect(calls.closes).toEqual([])
+  expect(state.panes.map(p => p.id)).toEqual(['compact'])
+  // The next title it sends carries the rows of the view it is in now.
+  await measure($, 37)
+  expect(calls.opens.at(-1)).toEqual({ id: 'compact', title: titleAt(37), rows: EXPANDED_ROWS })
+})
+
+test('a title change keeps the rows of an expanded compact view', async ($, on) => {
+  const { calls, clock } = engine(on, { store: { config: pinned, lastReading: reading(33) }, surfaces: ['vscode'] })
+  await start($, clock)
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await ui.press({ key: 'details-toggle' })
+
+  await measure($, 37)
+
+  expect(calls.opens.at(-1)).toEqual({ id: 'compact', title: titleAt(37), rows: EXPANDED_ROWS })
+  await ui.unmount()
+})
+
+test('/budget in VS Code reopens the panel the person closed', async ($, on) => {
+  const { calls, clock, state } = engine(on, {
+    store: { config: pinned, lastReading: reading(33) },
+    surfaces: ['vscode'],
+  })
+  await start($, clock)
+  state.panes = []
+
+  const result = await run($, 'budget')
+
+  expect(result.text).toBe('Budget panel opened.')
+  expect(calls.opens).toHaveLength(2)
+  expect(calls.opens.at(-1)).toEqual({ id: 'compact', title: titleAt(33), rows: COLLAPSED_ROWS })
+  expect(calls.opens.map(open => open.id)).not.toContain('details')
+  expect(state.panes.map(p => p.id)).toEqual(['compact'])
+})
+
+test('/budget opens the panel in the full view, tall enough for the details', async ($, on) => {
+  const { calls } = engine(on, {
+    store: { config: { ...pinned, showCompactPanel: false }, lastReading: reading(33) },
+    surfaces: ['vscode'],
+  })
+
+  const result = await run($, 'budget')
+
+  expect(result.text).toBe('Budget panel opened.')
+  expect(calls.opens).toEqual([{ id: 'compact', title: titleAt(33), rows: EXPANDED_ROWS }])
+})
+
+test('/budget opens the panel beside a terminal too', async ($, on) => {
+  const { calls } = engine(on, {
+    store: { config: pinned, lastReading: reading(33) },
+    surfaces: ['terminal', 'vscode'],
+  })
+
+  const result = await run($, 'budget')
+
+  expect(result.text).toBe('Budget panel opened.')
+  expect(calls.opens.map(open => open.id)).toEqual(['compact'])
+})
+
+test('/budget in a terminal opens the details pane, not the panel', async ($, on) => {
+  const { calls } = engine(on, { store: { config: pinned, lastReading: reading(33) }, surfaces: ['terminal'] })
+
+  const result = await run($, 'budget')
+
+  expect(result.text).toBe('Budget details opened.')
+  expect(calls.opens).toEqual([{ id: 'details', title: 'Weekly budget' }])
+})
+
+test('/budget counts as the session opening the panel: it stays closed after a ✕', async ($, on) => {
+  const { calls, clock, state } = engine(on, {
+    store: { config: pinned, lastReading: reading(33) },
+    surfaces: [],
+  })
+  await start($, clock)
+  expect(calls.opens).toEqual([])
+
+  state.surfaces = ['vscode']
+  await run($, 'budget')
   expect(calls.opens).toHaveLength(1)
+  state.panes = []
+  await $.session.attach({ surface: 'vscode', clientId: 'vscode:default' })
+  await clock.advance(60_000)
+
+  expect(calls.opens).toHaveLength(1)
+})
+
+test('/budget snooze is unchanged in VS Code', { plugins: [probe] }, async ($, on) => {
+  const { calls } = engine(on, { store: { config: pinned, lastReading: reading(33) }, surfaces: ['vscode'] })
+
+  const result = await run($, 'budget', 'snooze 1h')
+
+  expect(result.text).toBe('Snoozed until 16:00.')
+  expect(await stored($, 'snooze')).toEqual({ until: now + HOUR_MS })
+  expect(calls.opens.map(open => open.id)).not.toContain('details')
+})
+
+test('switching the view keeps the details expanded', { plugins: [probe] }, async ($, on) => {
+  const { calls, clock } = engine(on, { store: { config: pinned, lastReading: reading(33) }, surfaces: ['vscode'] })
+  await start($, clock)
+  const panel = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  const settings = await $.ui.mount({ ...SETTINGS, surface: 'vscode' })
+  await panel.press({ key: 'details-toggle' })
+  expect(calls.opens.at(-1)?.rows).toBe(EXPANDED_ROWS)
+
+  await settings.select({ key: 'compact-panel', value: 'off' })
+  expect(calls.opens.at(-1)).toEqual({ id: 'compact', title: titleAt(33), rows: EXPANDED_ROWS })
+  expect(await panel.find({ key: 'details-toggle' })).toBeUndefined()
+
+  await settings.select({ key: 'compact-panel', value: 'on' })
+  expect(calls.opens.at(-1)).toEqual({ id: 'compact', title: titleAt(33), rows: EXPANDED_ROWS })
+  expect((await panel.find({ key: 'details-toggle' }))?.props.label).toBe('▾ Details')
+  expect((await panel.find({ type: 'Text', text: /Used 33%/ }))?.text).toBe('Used 33%')
+  expect(calls.closes).toEqual([])
+  await panel.unmount()
+  await settings.unmount()
 })
 
 test('a failing store leaves the session start intact and the pane unopened', async ($, on) => {

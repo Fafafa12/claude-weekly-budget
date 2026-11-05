@@ -188,6 +188,19 @@ test('a reading from yesterday is last known with its weekday', async ($, on) =>
   await ui.unmount()
 })
 
+// The one panel of VS Code carries the toggle; the details pane is all details.
+for (const surface of SURFACES) {
+  test(`the details pane has no Details toggle on ${surface}`, async ($, on) => {
+    engine(on)
+
+    const ui = await $.ui.mount({ ...PANE, surface })
+
+    expect(await ui.find({ key: 'details-toggle' })).toBeUndefined()
+    expect((await ui.find({ type: 'Text', text: /Used 33%/ }))?.text).toBe('Used 33%')
+    await ui.unmount()
+  })
+}
+
 test('terminal has no Svg', async ($, on) => {
   engine(on)
 
