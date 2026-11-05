@@ -84,11 +84,19 @@ export function isGated(e: GateInput, hasSurface: boolean): boolean {
 // only 'over' is held back.
 export type Gate = { drop: string } | { toast: 'over' } | null
 
-export function gatePrompt(b: Budget | null, cfg: Config, snoozedUntil: number | null, now: number): Gate {
+// mark is what the reason ends with: the stale mark of the reading behind it
+// (staleMark), so that a last-known figure is not read as live.
+export function gatePrompt(
+  b: Budget | null,
+  cfg: Config,
+  snoozedUntil: number | null,
+  now: number,
+  mark: string,
+): Gate {
   if (b === null || isSnoozed(snoozedUntil, now) || b.state !== 'over') return null
   switch (cfg.mode) {
     case 'block':
-      return { drop: blockReason(b) }
+      return { drop: blockReason(b, mark) }
     case 'rewarn':
       return { toast: 'over' }
     case 'warn':
@@ -96,17 +104,25 @@ export function gatePrompt(b: Budget | null, cfg: Config, snoozedUntil: number |
   }
 }
 
-export function toastText(t: Toast, b: Budget): string {
+// A toast's words, and the block reason's. mark ends them: the stale mark of the
+// reading behind them (staleMark), '' for a fresh one, as a measure's toasts are.
+export function toastText(t: Toast, b: Budget, mark = ''): string {
   switch (t) {
     case 'headsUp':
-      return `Heads-up: ${pct(b.left)}% of today's budget left (${pct(b.used)}% of ${pct(b.allowed)}% used).`
+      return `Heads-up: ${pct(b.left)}% of today's budget left (${pct(b.used)}% of ${pct(b.allowed)}% used).${mark}`
     case 'over':
-      return `Over today's budget: ${pct(b.used)}% used, ${pct(b.allowed)}% allowed by tonight. Snooze with /budget snooze 1h.`
+      return (
+        `Over today's budget: ${pct(b.used)}% used, ${pct(b.allowed)}% allowed by tonight. ` +
+        `Snooze with /budget snooze 1h.${mark}`
+      )
   }
 }
 
-export function blockReason(b: Budget): string {
-  return `Over today's budget (${pct(b.used)}% of ${pct(b.allowed)}% allowed by tonight). To continue: /budget snooze 1h`
+export function blockReason(b: Budget, mark = ''): string {
+  return (
+    `Over today's budget (${pct(b.used)}% of ${pct(b.allowed)}% allowed by tonight). ` +
+    `To continue: /budget snooze 1h${mark}`
+  )
 }
 
 // The argument of /budget snooze: 30m, 2h, today (until local midnight) or off.

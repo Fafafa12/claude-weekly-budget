@@ -3,7 +3,7 @@ import type { EngineInterface, PromptSubmitInput, SessionRateLimit, UsageUnit } 
 
 import { validatePins } from './lib/config'
 import type { Config } from './lib/config'
-import { paneTitle, statusLine } from './lib/format'
+import { paneTitle, staleMark, statusLine } from './lib/format'
 import { computeBudget, readingFrom } from './lib/plan'
 import type { Budget, Reading } from './lib/plan'
 import {
@@ -245,14 +245,15 @@ export async function onMeasure(
 export async function onPrompt($: EngineInterface, e: PromptSubmitInput): Promise<Gate> {
   const hasSurface = dependsOnSurface(e) && (await $.session.surfaces()).length > 0
   if (!isGated(e, hasSurface)) return null
-  const { now, cfg, snoozedUntil, budget } = await loadView($)
-  return gatePrompt(budget, cfg, snoozedUntil, now)
+  const { now, tz, cfg, snoozedUntil, budget, staleSince } = await loadView($)
+  return gatePrompt(budget, cfg, snoozedUntil, now, staleMark(staleSince, tz, now))
 }
 
-// The toast a re-warn gate asks for, worded for where the budget stands now.
+// The toast a re-warn gate asks for, worded for where the budget stands now, and
+// marked "as of" when that is a last-known reading.
 export async function showToast($: EngineInterface, toast: Toast): Promise<void> {
-  const { budget } = await currentBudget($)
-  if (budget !== null) await $.ui.toast(toastText(toast, budget))
+  const { budget, staleSince, tz, now } = await currentBudget($)
+  if (budget !== null) await $.ui.toast(toastText(toast, budget, staleMark(staleSince, tz, now)))
 }
 
 // /budget opens the details; /budget snooze <span> silences warnings and lets

@@ -104,6 +104,8 @@ const stored = async ($: Engine, key: string): Promise<unknown> =>
   JSON.parse((await run($, 'probe', key)).text ?? 'null')
 
 const blocking = { config: { ...pinned, mode: 'block' }, lastReading: reading(43, now - 30 * 60e3) }
+// Its reading is half an hour old, so the reason says when it is from.
+const blockedReason = blockReason(budgetAt(43), ' · as of 14:30')
 
 test('terminal shows status line', async ($, on) => {
   const { calls, clock } = engine(on, { store: { config: pinned }, surfaces: ['terminal'] })
@@ -154,7 +156,7 @@ test('block drops the next message from a shared reading', async ($, on) => {
   await start($, clock)
   const result = await submit($)
 
-  expect(result).toEqual({ drop: blockReason(budgetAt(43)) })
+  expect(result).toEqual({ drop: blockedReason })
   expect(result.drop).toContain('/budget snooze 1h')
   expect(calls.toasts).toEqual([])
 })
@@ -166,7 +168,7 @@ test('block drops from a shared reading before this session has refreshed', asyn
 
   const result = await submit($)
 
-  expect(result).toEqual({ drop: blockReason(budgetAt(43)) })
+  expect(result).toEqual({ drop: blockedReason })
   expect(result.drop).toContain('/budget snooze 1h')
   expect(calls.statuses).toEqual([])
 })
@@ -285,7 +287,7 @@ for (const { label, origin } of held) {
 
     const result = await fromOrigin($, origin === undefined ? {} : { origin })
 
-    expect(result).toEqual({ drop: blockReason(budgetAt(43)) })
+    expect(result).toEqual({ drop: blockedReason })
   })
 }
 
@@ -483,6 +485,32 @@ test('rewarn toasts each message', async ($, on) => {
   expect(second.text).toBe('again')
   expect(calls.toasts).toEqual([toastText('over', budgetAt(43)), toastText('over', budgetAt(43))])
   expect(calls.toasts[0]).toStartWith("Over today's budget: 43% used")
+})
+
+// What a re-warn toast or a block reason says is from the reading behind it: when
+// that is last known, they end with the same mark as the status line.
+test('a block reason built on a reading an hour old ends with its time', async ($, on) => {
+  engine(on, { store: { config: { ...pinned, mode: 'block' }, lastReading: reading(43, now - HOUR_MS) } })
+
+  const result = await submit($)
+
+  expect(result.drop).toBe(blockReason(budgetAt(43), ' · as of 14:00'))
+  expect(result.drop).toEndWith('/budget snooze 1h · as of 14:00')
+})
+
+test('a block reason built on a reading from yesterday names the day', async ($, on) => {
+  engine(on, { store: { config: { ...pinned, mode: 'block' }, lastReading: reading(43, now - DAY_MS) } })
+
+  expect((await submit($)).drop).toEndWith(' · as of Wed 15:00')
+})
+
+test('a re-warn toast built on a reading an hour old ends with its time', async ($, on) => {
+  const { calls } = engine(on, { store: { config: { ...pinned, mode: 'rewarn' }, lastReading: reading(43, now - HOUR_MS) } })
+
+  await submit($)
+
+  expect(calls.toasts).toEqual([toastText('over', budgetAt(43), ' · as of 14:00')])
+  expect(calls.toasts[0]).toEndWith(' · as of 14:00')
 })
 
 test('warn mode over lets messages through without a toast', async ($, on) => {

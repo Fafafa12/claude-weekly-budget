@@ -108,6 +108,9 @@ test('toast copy', async () => {
   expect(toastText('over', at(43))).toBe(
     "Over today's budget: 43% used, 39% allowed by tonight. Snooze with /budget snooze 1h.",
   )
+  expect(toastText('over', at(43), ' · as of 14:00')).toBe(
+    "Over today's budget: 43% used, 39% allowed by tonight. Snooze with /budget snooze 1h. · as of 14:00",
+  )
   expect(toastText('over', at(43.25))).toBe(
     "Over today's budget: 43.3% used, 39% allowed by tonight. Snooze with /budget snooze 1h.",
   )
@@ -117,22 +120,26 @@ test('gate', async () => {
   const b = at(43)
   const mode = (m: Config['mode']): Config => ({ ...cfg, mode: m })
 
-  const blocked = gatePrompt(b, mode('block'), null, now)
+  const blocked = gatePrompt(b, mode('block'), null, now, '')
   expect(blocked).toEqual({
     drop: "Over today's budget (43% of 39% allowed by tonight). To continue: /budget snooze 1h",
   })
   expect(blockReason(b)).toBe("Over today's budget (43% of 39% allowed by tonight). To continue: /budget snooze 1h")
 
-  expect(gatePrompt(b, mode('rewarn'), null, now)).toEqual({ toast: 'over' })
-  expect(gatePrompt(b, mode('warn'), null, now)).toBe(null)
-  expect(gatePrompt(b, mode('block'), now + HOUR_MS, now)).toBe(null)
-  expect(gatePrompt(b, mode('rewarn'), now + HOUR_MS, now)).toBe(null)
-  expect(gatePrompt(null, mode('block'), null, now)).toBe(null)
-  expect(gatePrompt(at(100), mode('block'), null, now)).toBe(null)
-  expect(gatePrompt(at(37), mode('block'), null, now)).toBe(null)
-  expect(gatePrompt(at(20), mode('block'), null, now)).toBe(null)
+  expect(gatePrompt(b, mode('rewarn'), null, now, '')).toEqual({ toast: 'over' })
+  expect(gatePrompt(b, mode('warn'), null, now, '')).toBe(null)
+  expect(gatePrompt(b, mode('block'), now + HOUR_MS, now, '')).toBe(null)
+  expect(gatePrompt(b, mode('rewarn'), now + HOUR_MS, now, '')).toBe(null)
+  expect(gatePrompt(null, mode('block'), null, now, '')).toBe(null)
+  expect(gatePrompt(at(100), mode('block'), null, now, '')).toBe(null)
+  expect(gatePrompt(at(37), mode('block'), null, now, '')).toBe(null)
+  expect(gatePrompt(at(20), mode('block'), null, now, '')).toBe(null)
   // A snooze that has run out no longer lets the prompt through.
-  expect(gatePrompt(b, mode('block'), now, now)).toEqual({ drop: blockReason(b) })
+  expect(gatePrompt(b, mode('block'), now, now, '')).toEqual({ drop: blockReason(b) })
+  // The mark of a last-known reading ends the reason.
+  expect(gatePrompt(b, mode('block'), null, now, ' · as of 14:00')).toEqual({
+    drop: "Over today's budget (43% of 39% allowed by tonight). To continue: /budget snooze 1h · as of 14:00",
+  })
 })
 
 test('only the person\'s own next message is gated', async () => {

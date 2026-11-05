@@ -76,7 +76,7 @@ export function asOf(staleSince: number, tz: Tz, now: number): string {
 
 // What a line about the budget ends with: " · as of 14:00" for a last-known reading,
 // nothing for a live one.
-function staleMark(staleSince: number | null, tz: Tz, now: number): string {
+export function staleMark(staleSince: number | null, tz: Tz, now: number): string {
   return staleSince === null ? '' : ` · as of ${asOf(staleSince, tz, now)}`
 }
 
