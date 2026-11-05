@@ -8,6 +8,7 @@ import { computeBudget, readingFrom } from './lib/plan'
 import type { Budget, Reading } from './lib/plan'
 import {
   loadConfig,
+  loadConfigVersion,
   loadLedger,
   loadSharedReading,
   loadSnooze,
@@ -41,6 +42,7 @@ const compactPane = (v: { budget: Budget | null; staleSince: number | null; tz: 
 })
 
 const USAGE = 'Usage: /budget, /budget snooze 30m|1h|today|off'
+const NEWER_CONFIG = 'These settings were saved by a newer version of weekly-budget. Update the plugin to change them.'
 
 // The local zone: the machine's, unless the environment pins a fixed offset in
 // minutes (WEEKLY_BUDGET_TZ_OFFSET_MIN=180 for UTC+3). The engine ignores TZ=, so
@@ -155,9 +157,11 @@ export async function setSettingsError($: EngineInterface, message: string | nul
 
 // A config set from the settings pane: kept in the store for every session, then
 // shown by the status line and the panes. A config that fails its checks changes
-// nothing but the error the pane shows, which is returned.
+// nothing but the error the pane shows, which is returned. So does any change over
+// a config a newer version of the plugin saved: this one would lose what it added.
 export async function applyConfig($: EngineInterface, next: Config): Promise<string | null> {
-  const error = validatePins(next.pins)
+  const storedVersion = await loadConfigVersion($)
+  const error = storedVersion !== null && storedVersion > 1 ? NEWER_CONFIG : validatePins(next.pins)
   if (error !== null) {
     await setSettingsError($, error)
     return error

@@ -34,6 +34,13 @@ export async function loadConfig($: EngineInterface): Promise<Config> {
   return normalizeConfig(await $.store.get(KEY.config))
 }
 
+// The version the stored config says it is, before it is read as this version's:
+// null when it says none.
+export async function loadConfigVersion($: EngineInterface): Promise<number | null> {
+  const v = await $.store.get(KEY.config)
+  return isRecord(v) && isNum(v.version) ? v.version : null
+}
+
 export async function saveConfig($: EngineInterface, c: Config): Promise<void> {
   await $.store.set(KEY.config, c)
 }

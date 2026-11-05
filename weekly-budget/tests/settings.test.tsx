@@ -559,3 +559,38 @@ test('the settings show what is stored, with no reading', async ($, on) => {
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
   await ui.unmount()
 })
+
+// A config a later version of the plugin wrote may hold what this one cannot read:
+// saving over it would lose that, so no change is saved until the plugin is updated.
+const NEWER = 'These settings were saved by a newer version of weekly-budget. Update the plugin to change them.'
+for (const surface of SURFACES) {
+  test(`settings saved by a newer version are not overwritten on ${surface}`, { plugins: [probe] }, async ($, on) => {
+    const newer = { ...weekend10, version: 2, futureField: 'kept' }
+    engine(on, { store: { config: newer } })
+    const ui = await $.ui.mount({ ...PANE, surface })
+
+    await ui.select({ key: 'mode', value: 'block' })
+
+    const shown = await ui.find({ type: 'Text', text: /newer version/ })
+    expect(shown?.text).toBe(NEWER)
+    expect(shown?.props.color).toBe('error')
+    expect(await stored($, 'config')).toEqual(newer)
+
+    await ui.input({ key: 'pin-percent', text: '10' })
+    await ui.press({ key: 'reset-plan' })
+    expect(await stored($, 'config')).toEqual(newer)
+    await ui.unmount()
+  })
+}
+
+test('a config of this version, or with no version, is still saved', { plugins: [probe] }, async ($, on) => {
+  const { version: _, ...unversioned } = weekend10
+  engine(on, { store: { config: unversioned } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  await ui.select({ key: 'mode', value: 'block' })
+
+  expect((await storedConfig($)).mode).toBe('block')
+  expect(await ui.find({ type: 'Text', text: /newer version/ })).toBeUndefined()
+  await ui.unmount()
+})
