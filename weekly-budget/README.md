@@ -9,7 +9,7 @@ It works in the terminal and in the VS Code extension.
 - **The week is Claude's own week**, from one limit reset to the next, not Monday to Sunday. Days are cut at midnight in your local time zone.
 - **You pin days or groups of days to a share of the week.** For example, the weekend (Saturday and Sunday together) gets 10%. Single days and Monday to Friday can be pinned too.
 - **The days you don't pin share the rest evenly.** With no pins, every day gets one seventh. Pinned shares can't add up to more than 100%. If they add up to exactly 100%, any unpinned days get nothing.
-- **The allowance adds up through the week.** What you have not used carries forward, and overspending eats into the days after. "Allowed by tonight" is the sum of the shares up to the end of today.
+- **The allowance adds up through the week.** "Allowed by tonight" is what the plan allows up to the end of today. What you don't use, or use past your share, is handled by the **Leftover** setting: by default it lands on the next day; set to Adaptive, it is spread over the rest of the week (see [Leftover: Fixed or Adaptive](#leftover-fixed-or-adaptive)).
 - **The days where the week starts and ends** are split by the hours that fall inside the week, so the shares still add up to 100%.
 
 It shows how much of the week you have used, how much the plan allows by tonight, and what is left (or over) for today.
@@ -22,7 +22,40 @@ Advanced: `WEEKLY_BUDGET_TZ_OFFSET_MIN` in the environment overrides the time zo
 | --- | --- |
 | `/budget` | In the terminal, opens the details: used, allowed by tonight, today's balance, when the week resets, your plan, the mode and the snooze state, with snooze buttons. In VS Code, opens the budget panel (see below), even if you closed it. |
 | `/budget snooze 30m`, `1h`, `today` or `off` | Snoozes warnings for that long (any number of minutes or hours works), until the end of today, or ends the snooze. |
-| `/budget-config` | Opens the settings: the plan, the mode, the heads-up, the status line style, the snooze durations and the VS Code panel's view. |
+| `/budget-config` | Opens the settings: the plan, the leftover, the mode, the heads-up, the snooze durations, the status line style and the VS Code panel's view. See [Settings](#settings). |
+
+## Settings
+
+Run `/budget-config` to change them. Every change applies at once, in every open chat, terminal and VS Code alike. A value the plan's checks refuse, such as shares adding up to more than 100%, shows in red and changes nothing.
+
+- **In VS Code**, click a choice.
+- **In the terminal**, the settings open with the keyboard on them: Tab or the arrow keys move, Enter chooses, Esc goes back to the prompt. To come back to the panel later, press `ctrl+x tab`.
+
+| Setting | Choices | Default | What it does |
+| --- | --- | --- | --- |
+| **Pin** and **% of the week** | Weekend, Weekdays, or one day; then a percent | no pins | Gives those days that share of the week, split evenly between them. Pinning a day that is already in a group replaces that group. |
+| **Remove …** / **Reset plan** | buttons | | Remove one pin, or all of them. |
+| **Leftover** | Fixed · Adaptive | Fixed | What happens to what a day doesn't use, or uses past its share. See below. |
+| **Mode** | Warn once · Every message · Block | Warn once | How it warns when you are over today's budget. See [Warnings and modes](#warnings-and-modes). |
+| **Heads-up (of today left)** | Off · 10% · 25% · 50% | 25% | An early notification when that much of today's share is left. |
+| **Snooze options** | minutes, comma-separated | 60 | The snooze buttons in the details. "Snooze today" is always there too. |
+| **Status line** | Numbers · Bar · Minimal | Bar | The terminal's line under the prompt. |
+| **Compact panel (VS Code)** | On · Off | On | The VS Code panel's view: compact (details behind "▸ Details") or full (details always shown). |
+
+The settings are kept in `~/.claude/plugins/store/`, shared by all your sessions.
+
+### Leftover: Fixed or Adaptive
+
+Say the weekend is pinned at 10%, so each weekday gets 18%, and on Wednesday you use only 10% instead of 18%.
+
+- **Fixed (the default).** Each day keeps its share. What a day leaves unused lands on the next day: on Thursday you are allowed 18% + the 8% left over, so 26% "left today". Going over works the same way: it all comes out of the next day.
+- **Adaptive.** Your pinned days keep their share, and what is left of the week is shared again over the **unpinned days still ahead, today included**. Wednesday's 8% is spread over Thursday, Friday, Monday and Tuesday, about +2% each, and the weekend stays at 5% + 5%. Going over is spread the same way: it lowers every unpinned day ahead a little, instead of taking it all from tomorrow.
+
+With Adaptive:
+
+- **Today's share is set when the day begins**, from what you had used by then, so "left today" doesn't shrink while you work. The first reading of a day records that starting point for all your sessions.
+- **The bar** shows the days already gone as one stretch, as wide as what you actually used, then today and the days ahead at their new shares. The "allowed by tonight" marker still sits at the end of today.
+- **If every day is pinned**, there is nothing to share out, and it works like Fixed.
 
 ## Warnings and modes
 

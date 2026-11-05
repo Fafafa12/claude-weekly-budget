@@ -372,3 +372,13 @@ for (const surface of SURFACES) {
     await ui.unmount()
   })
 }
+
+for (const surface of SURFACES) {
+  test(`the leftover setting is shown on ${surface}`, async ($, on) => {
+    engine(on, { store: { config: { ...pinned, leftover: 'adaptive' }, lastReading: reading(33) } })
+    const ui = await $.ui.mount({ ...PANE, surface })
+
+    expect((await ui.find({ type: 'Text', text: /^Leftover:/ }))?.text).toBe('Leftover: adaptive')
+    await ui.unmount()
+  })
+}

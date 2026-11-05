@@ -62,6 +62,7 @@ export function renderDetailsBody(
       <Box flexDirection="column">
         <Text>{planLine(cfg)}</Text>
         <Text>{`Mode: ${MODE_NAMES[cfg.mode]}`}</Text>
+        <Text>{`Leftover: ${cfg.leftover}`}</Text>
       </Box>
       <Box flexDirection="column">
         <Text>{isSnoozed ? `Warnings snoozed until ${tz.hhmm(snoozedUntil)}` : 'Warnings on'}</Text>

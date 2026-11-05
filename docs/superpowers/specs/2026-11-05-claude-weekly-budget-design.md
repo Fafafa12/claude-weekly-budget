@@ -119,6 +119,20 @@ These come from research of the docs and a working spike on Claude Code CLI **2.
 - When a new week starts, or the reset comes early, recompute everything from the new `resetsAt` and **reset the warning ledger** (§8).
 - One unverified report says weekly resets sometimes arrive after about 72h. The design must not assume 7 days elapse.
 
+### Leftover: Fixed or Adaptive (added 2026-11-05, user-approved)
+
+- A setting, **Leftover**, with two values. The stored field is `leftover`, defaulting to `'fixed'`, in config `version: 1`.
+  - **Fixed** is everything above: "allowed by tonight" is the plan's cumulative share up to the end of today, so a day's leftover or overuse lands on the next day.
+  - **Adaptive**: pinned days keep their planned share. What is left of the week, `planTotal − usedAtDayStart − pinned shares still ahead`, floored at 0, is shared over the unpinned days still ahead, today included, in proportion to their planned shares.
+- Under Adaptive:
+  - "Allowed by tonight" is `usedAtDayStart + today's adapted share`.
+  - The days gone by become one stretch, scaled to `usedAtDayStart`, so the pieces still add up and the marker ends at today.
+  - With no unpinned day ahead, it is the same as Fixed.
+- **`usedAtDayStart`** is what had been used when today began. It is fixed for the day, so "left today" doesn't shrink while you work.
+  - It is kept in `$.store` under `dayStart` (`{ weekKey, dayKey, percentUsed }`), shared by every session.
+  - The first fresh reading of a day records it, from the last same-window reading of an earlier day, or 0 when the week began today, or the reading itself.
+  - Without a record for today, the reading itself stands in.
+
 ## 7. Display (decided)
 
 ### Terminal
@@ -154,7 +168,7 @@ These come from research of the docs and a working spike on Claude Code CLI **2.
     - **Full (off):** the bar with the details always shown, and no toggle.
     - **The details** are what the terminal's details pane shows, from one shared renderer: used, allowed by tonight and the coloured today line, the reset line, the plan, the mode, and the snooze line with its buttons (snooze options, snooze today, Resume). A last-known reading is marked as it is everywhere else.
   - This **supersedes the earlier "no expand/▾ button, and no other controls" line**: the user decided on 2026-11-05 to have the toggle and the details in the panel.
-  - **Height:** the panel asks for `rows: 4` in the compact view while collapsed (the bar, a gap and the toggle row), and `rows: 17` when expanded or in the full view. These are counted from the layout and are to be tuned by eye in VS Code (R32, revising R30). A change of the toggle or of the view asks again with the new height, under the same title. The plugin keeps the rows it last asked for, because the engine's pane list has none, and asks again on the next refresh if the view was changed from another session (R33).
+  - **Height:** the panel asks for `rows: 4` in the compact view while collapsed (the bar, a gap and the toggle row), and `rows: 18` when expanded or in the full view (17 before the details gained the Leftover line). These are counted from the layout and are to be tuned by eye in VS Code (R32, revising R30). A change of the toggle or of the view asks again with the new height, under the same title. The plugin keeps the rows it last asked for, because the engine's pane list has none, and asks again on the next refresh if the view was changed from another session (R33).
   - **Opening:** the panel opens once per session on any surface but the terminal, in either view. Switching the view never closes it, and never reopens one the user closed.
   - Update the title whenever the numbers change, but **only if the panel is still open** (check `$.ui.panes()`). Never reopen a panel the user closed during that session by itself: ✕ closes it for the chat, and only `/budget` brings it back.
 

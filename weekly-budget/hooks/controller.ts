@@ -4,20 +4,22 @@ import type { EngineInterface, PromptSubmitInput, SessionRateLimit, UsageUnit } 
 import { validatePins } from './lib/config'
 import type { Config } from './lib/config'
 import { staleMark, statusLine } from './lib/format'
-import { computeBudget, readingFrom } from './lib/plan'
+import { computeBudget, nextDayStart, readingFrom, usageAtDayStart } from './lib/plan'
 import type { Budget, Reading } from './lib/plan'
 import {
+  STALE_MS,
   loadConfig,
   loadConfigVersion,
+  loadDayStart,
   loadLedger,
   loadSharedReading,
   loadSnooze,
   pickReading,
   saveConfig,
+  saveDayStart,
   saveLedger,
   saveSharedReading,
   saveSnooze,
-  STALE_MS,
 } from './lib/store'
 import { fixedOffsetTz, systemTz } from './lib/tz'
 import type { Tz } from './lib/tz'
@@ -38,10 +40,10 @@ export const compactRowsAtom = atom({ plugin: 'weekly-budget', key: 'compactRows
 // VS Code's one panel. Its height is what it is asked for, in rows: the bar and the
 // toggle row while the compact view is collapsed, the bar with the details otherwise.
 // Counted from the layout (the bar is 2 rows, the toggle 1, the details about 12, and
-// a gap between each); to be tuned by eye in VS Code.
+// a gap between each, the details now with the leftover line); to be tuned by eye in VS Code.
 const COMPACT = 'compact'
 const COLLAPSED_ROWS = 4
-const EXPANDED_ROWS = 17
+const EXPANDED_ROWS = 18
 
 // The host draws a pane's title in plain text, so the panel's only names it: the
 // summary, coloured by the state, is the panel's own first line.
@@ -76,16 +78,18 @@ export async function resolveTz($: EngineInterface): Promise<Tz> {
 
 // The store read into everything a decision or a display needs, at one `now`.
 async function loadView($: EngineInterface) {
-  const [now, tz, cfg, snoozedUntil, own, shared] = await Promise.all([
+  const [now, tz, cfg, snoozedUntil, own, shared, dayStart] = await Promise.all([
     $.clock.now(),
     resolveTz($),
     loadConfig($),
     loadSnooze($),
     read($, readingAtom),
     loadSharedReading($),
+    loadDayStart($),
   ])
   const { reading, staleSince } = pickReading(own, shared, now)
-  const budget = reading === null ? null : computeBudget(reading, cfg, now, tz)
+  const budget =
+    reading === null ? null : computeBudget(reading, cfg, now, tz, usageAtDayStart(reading, dayStart, now, tz))
   return { now, tz, cfg, snoozedUntil, reading, staleSince, budget }
 }
 
@@ -261,6 +265,12 @@ export async function onMeasure(
   if (measured !== null && measured.resetsMs > now) {
     const own = await read($, readingAtom)
     const reading = measuredReading(own, measured, changed)
+    const tz = await resolveTz($)
+    // The first fresh reading of a day records what the day began with: the last one
+    // of the days before, as the store still has it, until this one replaces it.
+    const [storedDayStart, previous] = await Promise.all([loadDayStart($), loadSharedReading($)])
+    const dayStart = nextDayStart(storedDayStart, previous, reading, now, tz)
+    if (dayStart !== storedDayStart) await saveDayStart($, dayStart)
     if (reading !== own) {
       await update($, readingAtom, () => reading)
       await saveSharedReading($, reading, now)
@@ -268,13 +278,8 @@ export async function onMeasure(
 
     // The heads-up and the over toast go by a fresh reading only.
     if (now - reading.at <= STALE_MS) {
-      const [cfg, ledger, snoozedUntil, tz] = await Promise.all([
-        loadConfig($),
-        loadLedger($),
-        loadSnooze($),
-        resolveTz($),
-      ])
-      const budget = computeBudget(reading, cfg, now, tz)
+      const [cfg, ledger, snoozedUntil] = await Promise.all([loadConfig($), loadLedger($), loadSnooze($)])
+      const budget = computeBudget(reading, cfg, now, tz, usageAtDayStart(reading, dayStart, now, tz))
       const decided = measureToast(budget, cfg, ledger, snoozedUntil, now, tz)
       // The same ledger back means nothing changed; otherwise keep it, even with no
       // toast, because a new week resets it.

@@ -2,7 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import { normalizeConfig } from './config'
 import type { Config } from './config'
-import type { Reading } from './plan'
+import type { DayStart, Reading } from './plan'
 import type { Ledger } from './warnings'
 
 // The store is shared by every session, and anything in it may be missing or
@@ -21,6 +21,7 @@ const KEY = {
   snooze: 'snooze',
   ledger: 'ledger',
   reading: 'lastReading',
+  dayStart: 'dayStart',
 } as const
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -63,6 +64,18 @@ export async function loadLedger($: EngineInterface): Promise<Ledger | null> {
 
 export async function saveLedger($: EngineInterface, l: Ledger): Promise<void> {
   await $.store.set(KEY.ledger, l)
+}
+
+// What today began with in this week (the adaptive leftover's starting point), shared
+// by every session: the first to see a day records it.
+export async function loadDayStart($: EngineInterface): Promise<DayStart | null> {
+  const v = await $.store.get(KEY.dayStart)
+  if (!isRecord(v) || !isNum(v.weekKey) || typeof v.dayKey !== 'string' || !isNum(v.percentUsed)) return null
+  return { weekKey: v.weekKey, dayKey: v.dayKey, percentUsed: v.percentUsed }
+}
+
+export async function saveDayStart($: EngineInterface, d: DayStart): Promise<void> {
+  await $.store.set(KEY.dayStart, d)
 }
 
 export async function loadSharedReading($: EngineInterface): Promise<Reading | null> {

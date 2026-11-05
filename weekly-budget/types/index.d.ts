@@ -6,6 +6,9 @@ export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6 // Date.getDay(): 0 is Sunday
 export type Pin = { days: Weekday[]; percent: number } // a group's share, split evenly over its days
 export type Mode = 'warn' | 'rewarn' | 'block'
 export type StatusStyle = 'A' | 'B' | 'C'
+// What becomes of what a day did not use, or used past its share: fixed lands it all
+// on the next day; adaptive shares it over the unpinned days still ahead.
+export type Leftover = 'fixed' | 'adaptive'
 export type Config = {
   version: 1
   pins: Pin[]
@@ -15,8 +18,11 @@ export type Config = {
   statusStyle: StatusStyle
   snoozeOptionsMin: number[]
   showCompactPanel: boolean
+  leftover: Leftover
 }
 export type Reading = { percentUsed: number; resetsMs: number; at: number }
+// What had been used when a local day of a week began, as the first reading of that day knew it.
+export type DayStart = { weekKey: number; dayKey: string; percentUsed: number }
 
 declare module 'claude-code' {
   interface PluginState {

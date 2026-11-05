@@ -1,7 +1,7 @@
-import type { Config, Mode, Pin, StatusStyle, Weekday } from '../../types'
+import type { Config, Leftover, Mode, Pin, StatusStyle, Weekday } from '../../types'
 
 // The types live in the plugin's contract, types/index.d.ts.
-export type { Config, Mode, Pin, StatusStyle, Weekday }
+export type { Config, Leftover, Mode, Pin, StatusStyle, Weekday }
 
 export const DEFAULT_CONFIG: Config = {
   version: 1,
@@ -12,12 +12,14 @@ export const DEFAULT_CONFIG: Config = {
   statusStyle: 'B',
   snoozeOptionsMin: [60],
   showCompactPanel: true,
+  leftover: 'fixed',
 }
 
 export const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const // by Weekday
 
 const MODES: readonly Mode[] = ['warn', 'rewarn', 'block']
 const STYLES: readonly StatusStyle[] = ['A', 'B', 'C']
+const LEFTOVERS: readonly Leftover[] = ['fixed', 'adaptive']
 const SUM_SLACK = 1e-9
 
 // Each weekday's share of the week, by Weekday. Pinned days split their group's
@@ -102,5 +104,6 @@ export function normalizeConfig(raw: unknown): Config {
     statusStyle: readOneOf(r.statusStyle, STYLES, DEFAULT_CONFIG.statusStyle),
     snoozeOptionsMin: readSnoozeOptions(r.snoozeOptionsMin),
     showCompactPanel: readBool(r.showCompactPanel, DEFAULT_CONFIG.showCompactPanel),
+    leftover: readOneOf(r.leftover, LEFTOVERS, DEFAULT_CONFIG.leftover),
   }
 }

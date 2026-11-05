@@ -9,7 +9,7 @@ import {
   setSettingsError,
 } from '../controller'
 import { DAY_NAMES } from '../lib/config'
-import type { Config, Mode, Pin, StatusStyle, Weekday } from '../lib/config'
+import type { Config, Leftover, Mode, Pin, StatusStyle, Weekday } from '../lib/config'
 import { pct } from '../lib/format'
 import { loadConfig } from '../lib/store'
 import { planLine } from './shared'
@@ -49,6 +49,13 @@ const STYLES: readonly Choice<StatusStyle>[] = [
   { value: 'A', label: 'Numbers' },
   { value: 'B', label: 'Bar' },
   { value: 'C', label: 'Minimal' },
+]
+
+// What a day's unused share, or its overuse, does: land on the next day, or spread
+// over the unpinned days still ahead.
+const LEFTOVERS: readonly Choice<Leftover>[] = [
+  { value: 'fixed', label: 'Fixed' },
+  { value: 'adaptive', label: 'Adaptive' },
 ]
 
 const PANEL: readonly Choice[] = [
@@ -120,6 +127,11 @@ async function pickHeadsUp($: EngineInterface, value: string): Promise<void> {
 async function pickStyle($: EngineInterface, value: string): Promise<void> {
   const style = STYLES.find(s => s.value === value)
   if (style !== undefined) await change($, { statusStyle: style.value })
+}
+
+async function pickLeftover($: EngineInterface, value: string): Promise<void> {
+  const leftover = LEFTOVERS.find(l => l.value === value)
+  if (leftover !== undefined) await change($, { leftover: leftover.value })
 }
 
 async function setSnoozeOptions($: EngineInterface, text: string): Promise<void> {
@@ -196,6 +208,7 @@ export async function renderSettings($: EngineInterface, e: RenderInput<'Pane'>)
       </Box>
       <Box flexDirection="column">
         <Text>{planLine(cfg)}</Text>
+        {choiceRow(els, 'leftover', 'Leftover', LEFTOVERS, cfg.leftover, value => pickLeftover($, value))}
         {leavesDaysEmpty(cfg.pins) && <Text dimColor>Days without a share get 0%.</Text>}
       </Box>
       <Box flexWrap="wrap" gap={1}>

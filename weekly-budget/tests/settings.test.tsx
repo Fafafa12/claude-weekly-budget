@@ -308,7 +308,7 @@ for (const surface of SURFACES) {
     expect(calls.closes).toEqual([])
     expect(state.panes.map(p => p.id)).toEqual(['compact'])
     expect(calls.opens).toHaveLength(2)
-    expect(calls.opens.at(-1)).toMatchObject({ id: 'compact', rows: 17 })
+    expect(calls.opens.at(-1)).toMatchObject({ id: 'compact', rows: 18 })
     expect((await chosen(ui, 'compact-panel'))).toBe('off')
 
     await ui.press({ key: 'compact-panel-on' })
@@ -391,6 +391,10 @@ test('the controls are labelled', async ($, on) => {
   expect(await choices(ui, 'compact-panel')).toEqual([
     ['on', 'On'],
     ['off', 'Off'],
+  ])
+  expect(await choices(ui, 'leftover')).toEqual([
+    ['fixed', 'Fixed'],
+    ['adaptive', 'Adaptive'],
   ])
   await ui.unmount()
 })
@@ -661,3 +665,17 @@ test('VS Code, where a click does it, has no key hint', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /Tab or arrows/ })).toBeUndefined()
   await ui.unmount()
 })
+
+for (const surface of SURFACES) {
+  test(`leftover choice on ${surface}`, { plugins: [probe] }, async ($, on) => {
+    engine(on)
+    const ui = await $.ui.mount({ ...PANE, surface })
+    expect(await chosen(ui, 'leftover')).toBe('fixed')
+
+    await ui.press({ key: 'leftover-adaptive' })
+
+    expect((await storedConfig($)).leftover).toBe('adaptive')
+    expect(await chosen(ui, 'leftover')).toBe('adaptive')
+    await ui.unmount()
+  })
+}

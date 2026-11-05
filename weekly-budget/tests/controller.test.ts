@@ -711,3 +711,61 @@ for (const raw of ['841', '-841', '999999999999', '90.5']) {
     expect((await run($, 'budget', 'snooze 1h')).text).toBe(`Snoozed until ${systemTz.hhmm(now + HOUR_MS)}.`)
   })
 }
+
+// Adaptive, Thu 15:00 with the weekend at 10%: 10% used when Thu began leaves 80% for
+// the unpinned days ahead, so Thu allows 10 + 80 × 18/69 ≈ 30.9% by tonight.
+const adaptiveConfig = { ...pinned, leftover: 'adaptive', statusStyle: 'A' }
+const wednesdayNight = Date.parse('2026-11-04T20:00:00Z') // Wed 23:00 local
+
+test("adaptive: a measure records what the day began with and shares out yesterday's leftover", { plugins: [probe] }, async ($, on) => {
+  const { calls, clock } = engine(on, {
+    store: { config: adaptiveConfig, lastReading: reading(10, wednesdayNight) },
+    surfaces: ['terminal'],
+  })
+
+  await start($, clock)
+  await measure($, 12)
+
+  expect(calls.statuses.at(-1)).toBe('Week 12% / 30.9% allowed · today 18.9% left')
+  expect(await stored($, 'dayStart')).toEqual({ weekKey: reset, dayKey: '2026-11-05', percentUsed: 10 })
+})
+
+test("adaptive: a chat with no reading of its own goes by today's record", async ($, on) => {
+  const { calls, clock } = engine(on, {
+    store: {
+      config: adaptiveConfig,
+      lastReading: reading(12),
+      dayStart: { weekKey: reset, dayKey: '2026-11-05', percentUsed: 10 },
+    },
+    surfaces: ['terminal'],
+  })
+
+  await start($, clock)
+
+  expect(calls.statuses.at(-1)).toBe('Week 12% / 30.9% allowed · today 18.9% left')
+})
+
+test('a record of the day start leaves the fixed leftover as it is', async ($, on) => {
+  const { calls, clock } = engine(on, {
+    store: {
+      config: { ...pinned, statusStyle: 'A' },
+      lastReading: reading(12),
+      dayStart: { weekKey: reset, dayKey: '2026-11-05', percentUsed: 10 },
+    },
+    surfaces: ['terminal'],
+  })
+
+  await start($, clock)
+
+  expect(calls.statuses.at(-1)).toBe('Week 12% / 39% allowed · today 27% left')
+})
+
+test('a day already recorded is not recorded again', { plugins: [probe] }, async ($, on) => {
+  const today = { weekKey: reset, dayKey: '2026-11-05', percentUsed: 10 }
+  const { clock } = engine(on, { store: { config: adaptiveConfig, lastReading: reading(11), dayStart: today } })
+
+  await start($, clock)
+  await measure($, 14)
+
+  expect(await stored($, 'dayStart')).toEqual(today)
+})

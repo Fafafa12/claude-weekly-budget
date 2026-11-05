@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { DEFAULT_CONFIG, dayShares, normalizeConfig, validatePins } from '../hooks/lib/config'
 import type { Config, Pin, Weekday } from '../hooks/lib/config'
-import { computeBudget, readingFrom, weekPieces } from '../hooks/lib/plan'
+import { computeBudget, localDayStart, nextDayStart, readingFrom, usageAtDayStart, weekPieces } from '../hooks/lib/plan'
 import { fixedOffsetTz } from '../hooks/lib/tz'
 import type { Tz } from '../hooks/lib/tz'
 
@@ -182,4 +182,101 @@ test('readingFrom', async () => {
   expect(readingFrom([], now)).toBeNull()
   expect(readingFrom([{ kind: 'seven_day', percentUsed: 33 }], now)).toBeNull()
   expect(readingFrom([{ kind: 'seven_day', percentUsed: 33, resetsAt: 'soon' }], now)).toBeNull()
+})
+
+test('the leftover setting defaults to fixed and keeps adaptive', async () => {
+  expect(DEFAULT_CONFIG.leftover).toBe('fixed')
+  expect(normalizeConfig({ leftover: 'adaptive' }).leftover).toBe('adaptive')
+  expect(normalizeConfig({ leftover: 'sometimes' }).leftover).toBe('fixed')
+})
+
+// Adaptive: the pinned days keep their share; what is left of the week once the usage
+// at the start of today and the pinned days still ahead are taken out is shared over
+// the unpinned days still ahead, today included, as their planned shares weigh.
+// Thu 15:00, weekend 10%: ahead are Thu 18, Fri 18, Sat 5 (pinned), Sun 5 (pinned),
+// Mon 18, Tue 15, so the unpinned days ahead weigh 69 and the pinned ones hold 10.
+const adaptive: Config = { ...cfg, leftover: 'adaptive' }
+const adaptiveAt = (used: number, atDayStart: number, at = now) =>
+  computeBudget({ percentUsed: used, resetsMs: reset, at }, adaptive, at, tz, atDayStart)
+
+test('adaptive spreads what was not used over the unpinned days ahead', async () => {
+  // 10% used by the start of Thu leaves 80% for 69 of weight: Thu gets 80 × 18/69.
+  const b = adaptiveAt(12, 10)
+  expect(r6(b.todayShare)).toBe(r6((80 * 18) / 69))
+  expect(r6(b.allowed)).toBe(r6(10 + (80 * 18) / 69))
+  expect(r6(b.left)).toBe(r6(10 + (80 * 18) / 69 - 12))
+  expect(b.state).toBe('ok')
+  // The pinned days keep their share, and the week still adds up to the plan.
+  expect(b.pieces.map(p => r6(p.share))).toEqual(
+    [3 * (10 / 21), 18 * (10 / 21), (80 * 18) / 69, (80 * 18) / 69, 5, 5, (80 * 18) / 69, (80 * 15) / 69].map(r6),
+  )
+  expect(r6(sum(b.pieces.map(p => p.share)))).toBe(100)
+})
+
+test('adaptive takes what was over-used from the unpinned days ahead', async () => {
+  const b = adaptiveAt(52, 50)
+  expect(r6(b.todayShare)).toBe(r6((40 * 18) / 69))
+  expect(r6(b.allowed)).toBe(r6(50 + (40 * 18) / 69))
+})
+
+test('adaptive with nothing left for the unpinned days gives today nothing', async () => {
+  const b = adaptiveAt(96, 95)
+  expect(b.todayShare).toBe(0)
+  expect(b.allowed).toBe(95)
+  expect(b.state).toBe('over')
+})
+
+test('adaptive keeps a pinned today at its share', async () => {
+  const sat = Date.parse('2026-11-07T12:00:00Z') // Sat 15:00 local
+  const b = adaptiveAt(61, 60, sat)
+  expect(b.todayShare).toBe(5)
+  expect(b.allowed).toBe(65)
+})
+
+test('adaptive with every day pinned is the same as fixed', async () => {
+  const allPinned: Config = { ...adaptive, pins: [{ days: [1, 2, 3, 4, 5], percent: 90 }, { days: [6, 0], percent: 10 }] }
+  const reading = { percentUsed: 12, resetsMs: reset, at: now }
+  const fixed = computeBudget(reading, { ...allPinned, leftover: 'fixed' }, now, tz)
+  expect(r6(computeBudget(reading, allPinned, now, tz, 10).allowed)).toBe(r6(fixed.allowed))
+})
+
+test('fixed ignores the usage at the start of the day', async () => {
+  const reading = { percentUsed: 12, resetsMs: reset, at: now }
+  expect(r6(computeBudget(reading, cfg, now, tz, 10).allowed)).toBe(39)
+})
+
+test('localDayStart is the local midnight at or before the time', async () => {
+  expect(localDayStart(now, tz)).toBe(Date.parse('2026-11-04T21:00:00Z')) // Thu 00:00 local
+  expect(localDayStart(Date.parse('2026-11-04T21:00:00Z'), tz)).toBe(Date.parse('2026-11-04T21:00:00Z'))
+})
+
+// What was used when today began: the reading from before it, when there is one.
+test('nextDayStart records the usage the day began with', async () => {
+  const measured = { percentUsed: 12, resetsMs: reset, at: now }
+  const yesterday = { percentUsed: 10, resetsMs: reset, at: Date.parse('2026-11-04T20:00:00Z') } // Wed 23:00 local
+  const today = { weekKey: reset, dayKey: '2026-11-05', percentUsed: 9 }
+
+  // The same day of the same week: kept.
+  expect(nextDayStart(today, yesterday, measured, now, tz)).toBe(today)
+  // A new day: the last reading of the day before.
+  expect(nextDayStart(null, yesterday, measured, now, tz)).toEqual({ weekKey: reset, dayKey: '2026-11-05', percentUsed: 10 })
+  expect(nextDayStart({ ...today, dayKey: '2026-11-04' }, yesterday, measured, now, tz).percentUsed).toBe(10)
+  // Nothing from before: what is measured now.
+  expect(nextDayStart(null, null, measured, now, tz).percentUsed).toBe(12)
+  // A reading from another week does not count.
+  expect(nextDayStart(null, { ...yesterday, resetsMs: reset - 7 * DAY_MS }, measured, now, tz).percentUsed).toBe(12)
+  // A week that began today began with nothing used.
+  const tuesday = Date.parse('2026-11-03T18:00:00Z') // Tue 21:00 local, an hour into the week
+  const early = { percentUsed: 1, resetsMs: reset, at: tuesday }
+  expect(nextDayStart(null, null, early, tuesday, tz).percentUsed).toBe(0)
+})
+
+test('usageAtDayStart uses the record for today, else its best guess', async () => {
+  const reading = { percentUsed: 12, resetsMs: reset, at: now }
+  expect(usageAtDayStart(reading, { weekKey: reset, dayKey: '2026-11-05', percentUsed: 10 }, now, tz)).toBe(10)
+  // A record from another day or week is no record.
+  expect(usageAtDayStart(reading, { weekKey: reset, dayKey: '2026-11-04', percentUsed: 10 }, now, tz)).toBe(12)
+  expect(usageAtDayStart(reading, null, now, tz)).toBe(12)
+  // Never more than is used now.
+  expect(usageAtDayStart(reading, { weekKey: reset, dayKey: '2026-11-05', percentUsed: 20 }, now, tz)).toBe(12)
 })
