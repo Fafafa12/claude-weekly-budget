@@ -71,6 +71,7 @@ function engine(
     calls.registered.push(e.name)
     return { value: { command: e.name } }
   })
+  on('ui.panes', () => ({ value: [] }))
   on('ui.invalidate', () => ({ value: undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.attach', (_, e) => ({ clientId: e.clientId }))

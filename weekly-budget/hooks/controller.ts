@@ -3,7 +3,7 @@ import type { EngineInterface, PromptSubmitInput, SessionRateLimit } from 'claud
 
 import { DEFAULT_CONFIG } from './lib/config'
 import type { Config } from './lib/config'
-import { statusLine } from './lib/format'
+import { paneTitle, statusLine } from './lib/format'
 import { computeBudget, readingFrom } from './lib/plan'
 import type { Budget } from './lib/plan'
 import {
@@ -28,6 +28,10 @@ export const configAtom = atom({ plugin: 'weekly-budget', key: 'config' } as con
 export const snoozedUntilAtom = atom({ plugin: 'weekly-budget', key: 'snoozedUntil' } as const, null)
 export const settingsErrorAtom = atom({ plugin: 'weekly-budget', key: 'settingsError' } as const, null)
 export const pinDraftDaysAtom = atom({ plugin: 'weekly-budget', key: 'pinDraftDays' } as const, 'weekend')
+export const compactOpenedAtom = atom({ plugin: 'weekly-budget', key: 'compactOpened' } as const, false)
+
+const COMPACT = 'compact'
+const compactPane = (budget: Budget | null) => ({ id: COMPACT, title: paneTitle(budget), rows: 2 })
 
 const USAGE = 'Usage: /budget, /budget snooze 30m|1h|today|off'
 
@@ -76,7 +80,32 @@ export async function refresh($: EngineInterface): Promise<void> {
   // The status line is the terminal's; the other surfaces have no such place.
   const hasTerminal = (await $.session.surfaces()).includes('terminal')
   await $.ui.status(hasTerminal ? statusLine(budget, cfg.statusStyle, staleSince, tz, now) : undefined)
+  await syncCompact($, cfg, budget)
   $.ui.invalidate('ui.render')
+}
+
+// The compact pane above the VS Code chat: the summary is its title, and the host
+// draws that, so a changed title is a new open (which retitles). The panes the
+// engine lists are the ones still up: one the person closed is not there, and
+// stays closed. One the config now switches off is closed.
+async function syncCompact($: EngineInterface, cfg: Config, budget: Budget | null): Promise<void> {
+  const pane = (await $.ui.panes()).find(p => p.id === COMPACT)
+  if (pane === undefined) return
+  const wanted = compactPane(budget)
+  if (!cfg.showCompactPanel) await $.ui.close({ id: COMPACT })
+  else if (pane.title !== wanted.title) await $.ui.open(wanted)
+}
+
+// Opens the compact pane the first time a session has somewhere to draw it: any
+// surface but the terminal, which has the status line. Once a session has opened
+// it, it never does again, so a pane the person closed stays closed.
+export async function ensureCompact($: EngineInterface): Promise<void> {
+  if (await read($, compactOpenedAtom)) return
+  if (!(await $.session.surfaces()).some(s => s !== 'terminal')) return
+  const { budget, cfg } = await currentBudget($)
+  if (!cfg.showCompactPanel) return
+  await $.ui.open(compactPane(budget))
+  await update($, compactOpenedAtom, () => true)
 }
 
 // For a refresh nobody awaits (the session start, the minute tick): a failing

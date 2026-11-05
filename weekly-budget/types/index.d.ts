@@ -26,6 +26,7 @@ declare module 'claude-code' {
       snoozedUntil: number | null
       settingsError: string | null
       pinDraftDays: string
+      compactOpened: boolean // this session has opened the compact pane, so it never reopens one the person closed
     }
   }
 }

@@ -1,6 +1,7 @@
 import type { Register } from 'claude-code'
 
-import { onMeasure, onPrompt, refreshQuietly, runBudgetCommand, showToast } from './controller'
+import { ensureCompact, onMeasure, onPrompt, refreshQuietly, runBudgetCommand, showToast } from './controller'
+import { renderCompact } from './ui/compact'
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -14,6 +15,7 @@ export const register: Register = on => {
     })
     $.clock.every(60_000, () => void refreshQuietly($))
     void refreshQuietly($)
+    void ensureCompact($).catch(() => {})
 
     return next(e)
   })
@@ -22,6 +24,7 @@ export const register: Register = on => {
   on('session.attach', async ($, e, next) => {
     const attached = await next(e)
     await refreshQuietly($)
+    await ensureCompact($).catch(() => {})
 
     return attached
   })
@@ -40,6 +43,8 @@ export const register: Register = on => {
 
     return next(e)
   }).catch(($, e, next) => next(e))
+
+  on('ui.render', { component: 'Pane', requestId: 'compact' }, async ($, e) => renderCompact($, e))
 
   on('command.run', { command: 'budget' }, async ($, e) => ({
     text: await runBudgetCommand($, e.args),
