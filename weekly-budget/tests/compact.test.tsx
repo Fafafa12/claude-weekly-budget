@@ -135,7 +135,7 @@ test('compact view, collapsed: the bar and one Details toggle, no numbers', asyn
 
   const bars = await ui.findAll({ type: 'Svg' })
   expect(bars).toHaveLength(1)
-  expect(bars[0]?.props).toMatchObject({ alt: '🟢 33% of 39% · 6% left today', width: 456, height: 34 })
+  expect(bars[0]?.props).toMatchObject({ alt: '33% of 39% · 6% left today', width: 456, height: 34 })
   expect(String(bars[0]?.props.source)).toStartWith('<svg xmlns="http://www.w3.org/2000/svg"')
   const buttons = await ui.findAll({ type: 'Button' })
   expect(buttons.map(b => [b.key, b.props.label])).toEqual([['details-toggle', '▸ Details']])
@@ -224,7 +224,7 @@ test('the toggle re-opens the pane under the title it has, last-known mark inclu
   await ui.press({ key: 'details-toggle' })
 
   expect(calls.opens.slice(1)).toEqual([
-    { id: 'compact', title: '🟢 33% of 39% · 6% left today · as of 14:00', rows: EXPANDED_ROWS },
+    { id: 'compact', title: '33% of 39% · 6% left today · as of 14:00', rows: EXPANDED_ROWS },
   ])
   expect((await ui.find({ type: 'Text', text: /Last known/ }))?.text).toBe('Last known, as of 14:00')
   await ui.unmount()
@@ -337,7 +337,7 @@ test('opens only off-terminal', async ($, on) => {
 
   await start($, vscode.clock)
 
-  expect(vscode.calls.opens).toEqual([{ id: 'compact', title: '🟢 33% of 39% · 6% left today', rows: COLLAPSED_ROWS }])
+  expect(vscode.calls.opens).toEqual([{ id: 'compact', title: '33% of 39% · 6% left today', rows: COLLAPSED_ROWS }])
 })
 
 // A reading another session shared an hour ago is last known, not live: the title
@@ -351,8 +351,8 @@ test('the title and the bar mark a reading an hour old', async ($, on) => {
   await start($, clock)
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
 
-  expect(calls.opens.map(open => open.title)).toEqual(['🟢 33% of 39% · 6% left today · as of 14:00'])
-  expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('🟢 33% of 39% · 6% left today · as of 14:00')
+  expect(calls.opens.map(open => open.title)).toEqual(['33% of 39% · 6% left today · as of 14:00'])
+  expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('33% of 39% · 6% left today · as of 14:00')
   await ui.unmount()
 })
 
@@ -453,7 +453,7 @@ test('an open pane is retitled as the budget moves', async ($, on) => {
   await measure($, 37)
 
   expect(calls.opens.map(open => open.title)).toEqual([titleAt(33), titleAt(37)])
-  expect(titleAt(37)).toStartWith('🟡 37% of 39%')
+  expect(titleAt(37)).toStartWith('37% of 39%')
   expect(calls.opens[1]).toMatchObject({ id: 'compact', rows: COLLAPSED_ROWS })
 })
 
@@ -669,4 +669,33 @@ test('a failing store leaves the session start intact and the pane unopened', as
   await $.session.attach({ surface: 'vscode', clientId: 'vscode:default' })
 
   expect(calls.opens).toEqual([])
+})
+
+test('collapsed, the state sits beside a quiet Details link', async ($, on) => {
+  engine(on, { store: { config: pinned, lastReading: reading(37) } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+
+  expect((await ui.find({ type: 'Text', text: /^Running low$/ }))?.props).toMatchObject({ color: 'warning', bold: true })
+  expect((await ui.find({ key: 'details-toggle' }))?.props).toMatchObject({ plain: true, dimColor: true })
+  await ui.unmount()
+})
+
+test('expanded, the state label shows once', async ($, on) => {
+  const { clock } = engine(on, { store: { config: pinned, lastReading: reading(33) }, surfaces: ['vscode'] })
+  await start($, clock)
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+
+  await ui.press({ key: 'details-toggle' })
+
+  expect(await ui.findAll({ type: 'Text', text: /^On track$/ })).toHaveLength(1)
+  await ui.unmount()
+})
+
+test('the full view shows the state label too', async ($, on) => {
+  engine(on, { store: { config: { ...pinned, showCompactPanel: false }, lastReading: reading(43) } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+
+  expect((await ui.find({ type: 'Text', text: /^Over today$/ }))?.props).toMatchObject({ color: 'error', bold: true })
+  expect(await ui.find({ key: 'details-toggle' })).toBeUndefined()
+  await ui.unmount()
 })

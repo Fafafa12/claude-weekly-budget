@@ -1,13 +1,16 @@
-import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
+import type { EngineInterface, RenderElement, RenderInput, ThemeKey } from 'claude-code'
 
 import { DAY_NAMES, dayShares } from '../lib/config'
 import type { Config, Weekday } from '../lib/config'
-import { paneTitle, pct, textBar } from '../lib/format'
-import type { Budget } from '../lib/plan'
+import { paneTitle, pct, stateLabel, textBar } from '../lib/format'
+import type { Budget, BudgetState } from '../lib/plan'
 import { barSvg } from '../lib/svg'
 import type { Tz } from '../lib/tz'
 
 const BAR_HEIGHT = 34
+
+// Theme keys, so that the state follows Claude's theme on each surface.
+export const STATE_COLORS: Record<BudgetState, ThemeKey> = { ok: 'success', near: 'warning', over: 'error', limit: 'error' }
 
 export const NO_READING_TEXT = 'No weekly reading yet — send a message.'
 
@@ -40,4 +43,15 @@ export function renderBar(
   const { Svg } = els
   const source = barSvg(budget, width, tz)
   return <Svg source={source} alt={paneTitle(budget, staleSince, tz, now)} width={width} height={BAR_HEIGHT} />
+}
+
+// Where the budget stands, in a word in the state's theme colour: "On track",
+// "Running low", "Over today", "Weekly limit reached".
+export function renderStateLabel($: EngineInterface, e: RenderInput<'Pane'>, budget: Budget): RenderElement {
+  const { Text } = $.ui.resolve(e)
+  return (
+    <Text color={STATE_COLORS[budget.state]} bold>
+      {stateLabel(budget.state)}
+    </Text>
+  )
 }

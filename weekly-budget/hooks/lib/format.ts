@@ -15,15 +15,18 @@ export function pct(n: number): string {
   return String(Math.round(n * 10) / 10)
 }
 
-export function stateGlyph(s: BudgetState): string {
+// The state in words, for the label a panel colours: the plain-text title and
+// status line carry it in their numbers and the bar instead.
+export function stateLabel(s: BudgetState): string {
   switch (s) {
     case 'ok':
-      return '🟢'
+      return 'On track'
     case 'near':
-      return '🟡'
+      return 'Running low'
     case 'over':
+      return 'Over today'
     case 'limit':
-      return '🔴'
+      return 'Weekly limit reached'
   }
 }
 
@@ -90,22 +93,21 @@ export function statusLine(
   if (b === null) return NO_READING
   const stale = staleMark(staleSince, tz, now)
   if (b.state === 'limit') {
-    return `🔴 Weekly limit reached · resets in ${countdown(b.resetMs - now)}${stale}`
+    return `Weekly limit reached · resets in ${countdown(b.resetMs - now)}${stale}`
   }
-  const glyph = stateGlyph(b.state)
   const today = balance(b)
   switch (style) {
     case 'A':
-      return `${glyph} Week ${pct(b.used)}% / ${pct(b.allowed)}% allowed · today ${today}${stale}`
+      return `Week ${pct(b.used)}% / ${pct(b.allowed)}% allowed · today ${today}${stale}`
     case 'B':
-      return `${glyph} ${textBar(b.used, b.allowed)} ${pct(b.used)}% → ${pct(b.allowed)}% · today ${today}${stale}`
+      return `${textBar(b.used, b.allowed)} ${pct(b.used)}% → ${pct(b.allowed)}% · today ${today}${stale}`
     case 'C':
-      return `${glyph} ${todayText(b)}${stale}`
+      return `${todayText(b)}${stale}`
   }
 }
 
 export function paneTitle(b: Budget | null, staleSince: number | null, tz: Tz, now: number): string {
   if (b === null) return 'Weekly budget · no reading yet'
-  const summary = `${stateGlyph(b.state)} ${pct(b.used)}% of ${pct(b.allowed)}% · ${todayText(b)}`
+  const summary = `${pct(b.used)}% of ${pct(b.allowed)}% · ${todayText(b)}`
   return `${summary}${staleMark(staleSince, tz, now)}`
 }

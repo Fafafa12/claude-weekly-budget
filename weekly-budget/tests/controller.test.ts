@@ -113,7 +113,7 @@ test('terminal shows status line', async ($, on) => {
   await start($, clock)
   await measure($, 33)
 
-  expect(calls.statuses.at(-1)).toStartWith('🟢 ')
+  expect(calls.statuses.at(-1)).toStartWith('███████░│')
   expect(calls.statuses.at(-1)).toContain('33% → 39%')
 })
 
@@ -674,7 +674,7 @@ test('the status line follows the clock', async ($, on) => {
   await clock.advance(60_000)
 
   expect(calls.statuses.length).toBeGreaterThan(before)
-  expect(calls.statuses.at(-1)).toStartWith('🟢 ')
+  expect(calls.statuses.at(-1)).toMatch(/^[█░▓│]+ \d/)
 })
 
 test('without the offset variable the system zone is used', async ($, on) => {

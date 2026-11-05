@@ -2,7 +2,7 @@ import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 
 import { currentBudget } from '../controller'
 import { renderDetailsBody } from './details-body'
-import { NO_READING_TEXT, renderBar } from './shared'
+import { NO_READING_TEXT, renderBar, renderStateLabel } from './shared'
 
 // The body of the details pane, which /budget opens in a terminal (and any surface
 // that asks for it): the bar, then the details.
@@ -14,6 +14,7 @@ export async function renderDetails($: EngineInterface, e: RenderInput<'Pane'>):
   return (
     <Box flexDirection="column" gap={1}>
       {budget === null ? <Text dimColor>{NO_READING_TEXT}</Text> : renderBar($, e, budget, { staleSince, tz, now })}
+      {budget !== null && renderStateLabel($, e, budget)}
       {renderDetailsBody($, e, view)}
     </Box>
   )

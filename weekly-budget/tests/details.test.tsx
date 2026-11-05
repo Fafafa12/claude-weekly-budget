@@ -129,7 +129,6 @@ const STATE_COLORS = [
   { used: 33, color: 'success', text: '6% left today' },
   { used: 37, color: 'warning', text: '2% left today' },
   { used: 43, color: 'error', text: '4% over today' },
-  { used: 100, color: 'error', text: 'weekly limit reached' },
 ] as const
 for (const surface of SURFACES) {
   for (const { used, color, text } of STATE_COLORS) {
@@ -220,7 +219,7 @@ test('vscode draws the bar as an Svg, not as text', async ($, on) => {
 
   const bars = await ui.findAll({ type: 'Svg' })
   expect(bars).toHaveLength(1)
-  expect(bars[0]?.props).toMatchObject({ alt: '🟢 33% of 39% · 6% left today', width: 456, height: 34 })
+  expect(bars[0]?.props).toMatchObject({ alt: '33% of 39% · 6% left today', width: 456, height: 34 })
   expect(String(bars[0]?.props.source)).toStartWith('<svg xmlns="http://www.w3.org/2000/svg"')
   expect(await ui.find({ type: 'Text', text: /│/ })).toBeUndefined()
   await ui.unmount()
@@ -321,6 +320,54 @@ for (const surface of SURFACES) {
     )
     expect(await ui.find({ type: 'Svg' })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /Used|Allowed|Resets/ })).toBeUndefined()
+    await ui.unmount()
+  })
+}
+
+// The state reads as a word in Claude's theme colour, not as a coloured dot.
+const STATE_LABELS = [
+  [33, 'On track', 'success'],
+  [37, 'Running low', 'warning'],
+  [43, 'Over today', 'error'],
+  [100, 'Weekly limit reached', 'error'],
+] as const
+for (const surface of SURFACES) {
+  for (const [used, label, color] of STATE_LABELS) {
+    test(`at ${used}% the state reads "${label}" in ${color} on ${surface}`, async ($, on) => {
+      engine(on, { store: { config: pinned, lastReading: reading(used) } })
+      const ui = await $.ui.mount({ ...PANE, surface })
+
+      expect((await ui.find({ type: 'Text', text: new RegExp(`^${label}$`) }))?.props).toMatchObject({ color, bold: true })
+      await ui.unmount()
+    })
+  }
+
+  test(`the snooze buttons are secondary, not primary, on ${surface}`, async ($, on) => {
+    engine(on, { store: { config: pinned, lastReading: reading(33), snooze: { until: now + HOUR_MS } } })
+    const ui = await $.ui.mount({ ...PANE, surface })
+
+    for (const key of ['snooze-60', 'snooze-today', 'resume']) {
+      expect((await ui.find({ key }))?.props.variant).toBe('secondary')
+    }
+    await ui.unmount()
+  })
+
+  test(`with no reading there is no state label on ${surface}`, async ($, on) => {
+    engine(on, { store: { config: pinned } })
+    const ui = await $.ui.mount({ ...PANE, surface })
+
+    expect(await ui.find({ type: 'Text', text: /^(On track|Running low|Over today|Weekly limit reached)$/ })).toBeUndefined()
+    await ui.unmount()
+  })
+}
+
+// At the limit the label says it; there is no today line repeating it.
+for (const surface of SURFACES) {
+  test(`at the weekly limit the state is said once on ${surface}`, async ($, on) => {
+    engine(on, { store: { config: pinned, lastReading: reading(100) } })
+    const ui = await $.ui.mount({ ...PANE, surface })
+
+    expect(await ui.findAll({ type: 'Text', text: /limit reached/i })).toHaveLength(1)
     await ui.unmount()
   })
 }
