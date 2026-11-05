@@ -33,6 +33,7 @@ export function dayShares(pins: Pin[]): number[] {
 }
 
 export function validatePins(pins: Pin[]): string | null {
+  if (pins.some(pin => pin.days.length === 0)) return 'A group needs at least one day.'
   const seen = new Set<Weekday>()
   for (const pin of pins) {
     for (const day of pin.days) {

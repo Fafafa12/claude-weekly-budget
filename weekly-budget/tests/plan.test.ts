@@ -51,6 +51,9 @@ test('validatePins', async () => {
     { days: [1, 2], percent: 20 },
     { days: [2, 3], percent: 20 },
   ]
+  expect(validatePins([{ days: [], percent: 50 }])).toBe('A group needs at least one day.')
+  // Checked before the overlap: an empty group is named even beside an overlap.
+  expect(validatePins([{ days: [], percent: 50 }, ...overlap])).toBe('A group needs at least one day.')
   expect(validatePins(overlap)).toBe('Each day can only be in one group.')
   expect(validatePins([{ days: [1], percent: 120 }])).toBe('A share must be between 0 and 100%.')
   expect(validatePins([{ days: [1], percent: NaN }])).toBe('A share must be between 0 and 100%.')
@@ -73,6 +76,7 @@ test('normalizeConfig garbage', async () => {
   expect(bad.pins).toEqual([])
   expect(bad.mode).toBe('block')
   expect(normalizeConfig({ pins: [{ days: [9], percent: 10 }] }).pins).toEqual([])
+  expect(normalizeConfig({ pins: [{ days: [], percent: 50 }] }).pins).toEqual([])
   expect(normalizeConfig({ pins: cfg.pins }).pins).toEqual(cfg.pins)
 })
 
@@ -88,7 +92,14 @@ test('weekPieces DST week', async () => {
   const dst = steppedTz(ms => (ms < Date.parse('2026-10-25T01:00:00Z') ? 120 : 60))
   const pieces = weekPieces(Date.parse('2026-10-27T18:00:00Z'), dayShares(cfg.pins), dst)
   expect(pieces.length).toBe(8)
+  expect(pieces.map(p => p.weekday)).toEqual([2, 3, 4, 5, 6, 0, 1, 2])
   expect(r6(sum(pieces.map(p => p.share)))).toBe(100)
+  // Raw shares: the first Tuesday is 4h of 24h, the 25h Sunday is whole, and the
+  // last Tuesday is 19h of 24h. They add up to 99.25, scaled up to 100. A day
+  // length fixed at 24h would give the Sunday 5 x 25/24 and fail here.
+  const raw = [3, 18, 18, 18, 5, 5, 18, 14.25]
+  expect(r6(sum(raw))).toBe(99.25)
+  expect(pieces.map(p => r6(p.share))).toEqual(raw.map(s => r6((s * 100) / 99.25)))
   for (let i = 0; i < pieces.length - 1; i++) {
     expect(pieces[i]?.endMs).toBe(pieces[i + 1]?.startMs)
   }
