@@ -1,4 +1,4 @@
-import type { On, RenderSurface } from 'claude-code'
+import type { On, PromptOrigin, PromptSubmitInput, RenderSurface } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock, Plugin } from 'claude-code/testing'
 
@@ -182,6 +182,76 @@ test('block lets a meta prompt through', async ($, on) => {
 
   expect(result.drop).toBeUndefined()
 })
+
+// Block and re-warn are for the person's own next message. A prompt nobody typed
+// (a notification, a /loop tick, another session, a plugin) has no box to go back
+// to, and one delivered into a running turn is part of a task already going.
+const passing = [
+  { label: 'a task notification delivered into a running turn', origin: { kind: 'task-notification' }, turnId: 't1' },
+  { label: 'a scheduled trigger', origin: { kind: 'scheduled-trigger' } },
+  { label: 'a peer session', origin: { kind: 'peer' } },
+  { label: 'a plugin', origin: { kind: 'plugin', name: 'other-plugin' } },
+  { label: 'a message typed into a running turn', origin: { kind: 'composer' }, turnId: 't1' },
+] as const
+const fromOrigin = ($: Engine, input: { origin?: PromptOrigin; turnId?: string }) =>
+  $.prompt.submit({ text: 'hi', wait: false, ...input } as PromptSubmitInput)
+
+for (const { label, ...input } of passing) {
+  test(`block lets ${label} through`, async ($, on) => {
+    engine(on, { store: blocking })
+
+    const result = await fromOrigin($, input)
+
+    expect(result.drop).toBeUndefined()
+    expect(result.text).toBe('hi')
+  })
+
+  test(`rewarn does not toast on ${label}`, async ($, on) => {
+    const { calls } = engine(on, { store: { config: { ...pinned, mode: 'rewarn' }, lastReading: reading(43) } })
+
+    const result = await fromOrigin($, input)
+
+    expect(result.drop).toBeUndefined()
+    expect(calls.toasts).toEqual([])
+  })
+}
+
+test('a prompt that passes untouched reads nothing from the store', async ($, on) => {
+  engine(on, { store: null })
+  let reads = 0
+  on('store.get', () => {
+    reads++
+    return { deny: 'store is down' }
+  })
+
+  await fromOrigin($, { origin: { kind: 'scheduled-trigger' } })
+  await $.prompt.submit({ text: 'note', isMeta: true, wait: false, origin: { kind: 'composer' } })
+  expect(reads).toBe(0)
+
+  // The person's own prompt does read it (and passes, as the store is down).
+  expect((await submit($)).drop).toBeUndefined()
+  expect(reads).toBeGreaterThan(0)
+})
+
+// What a person can be behind: the VS Code panel's stamp is not documented, so sdk
+// and unclassified count as theirs, and so does a prompt with no origin at all.
+const held = [
+  { label: 'composer', origin: { kind: 'composer' } },
+  { label: 'bridge', origin: { kind: 'bridge' } },
+  { label: 'sdk', origin: { kind: 'sdk' } },
+  { label: 'slack-ping', origin: { kind: 'slack-ping' } },
+  { label: 'unclassified', origin: { kind: 'unclassified' } },
+  { label: 'no origin', origin: undefined },
+] as const
+for (const { label, origin } of held) {
+  test(`block drops a prompt from ${label}`, async ($, on) => {
+    engine(on, { store: blocking })
+
+    const result = await fromOrigin($, origin === undefined ? {} : { origin })
+
+    expect(result).toEqual({ drop: blockReason(budgetAt(43)) })
+  })
+}
 
 test('block fails open with no reading', async ($, on) => {
   const { calls, clock } = engine(on, { store: { config: { ...pinned, mode: 'block' } } })

@@ -1,3 +1,5 @@
+import type { PromptOrigin, PromptSubmitInput } from 'claude-code'
+
 import type { Config } from './config'
 import { pct } from './format'
 import type { Budget } from './plan'
@@ -48,19 +50,28 @@ export function measureToast(
   return { toast: null, ledger: current }
 }
 
+// The origins a person can be behind. How the VS Code panel stamps what is typed
+// there is not documented, so sdk and unclassified count too: block must hold there.
+const PERSON_ORIGINS: readonly string[] = ['composer', 'bridge', 'sdk', 'slack-ping', 'unclassified']
+
+// Whether block and re-warn apply to a prompt: only to the person's own next
+// message, sent while nothing runs. A meta prompt, a /budget command, a prompt
+// delivered into a running turn (turnId), and one nobody typed (a notification, a
+// schedule, another session, a plugin, any kind added later) pass untouched: such
+// a prompt has no box to go back to, and a dropped one is lost.
+export function isGated(e: Pick<PromptSubmitInput, 'isMeta' | 'command' | 'turnId'> & { origin?: PromptOrigin }): boolean {
+  if (e.isMeta === true || (e.command?.name ?? '').startsWith('budget')) return false
+  if (e.turnId !== undefined) return false
+  return e.origin === undefined || PERSON_ORIGINS.includes(e.origin.kind)
+}
+
 // What to do with a prompt about to be sent: drop it with a reason, show the
 // over toast again, or let it through. At the limit Claude stops on its own, so
 // only 'over' is held back.
 export type Gate = { drop: string } | { toast: 'over' } | null
 
-export function gatePrompt(
-  b: Budget | null,
-  cfg: Config,
-  snoozedUntil: number | null,
-  now: number,
-  isExempt: boolean,
-): Gate {
-  if (isExempt || b === null || isSnoozed(snoozedUntil, now) || b.state !== 'over') return null
+export function gatePrompt(b: Budget | null, cfg: Config, snoozedUntil: number | null, now: number): Gate {
+  if (b === null || isSnoozed(snoozedUntil, now) || b.state !== 'over') return null
   switch (cfg.mode) {
     case 'block':
       return { drop: blockReason(b) }

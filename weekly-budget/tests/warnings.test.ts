@@ -1,10 +1,11 @@
+import type { PromptOrigin } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 
 import { DEFAULT_CONFIG } from '../hooks/lib/config'
 import type { Config } from '../hooks/lib/config'
 import { computeBudget } from '../hooks/lib/plan'
 import { fixedOffsetTz } from '../hooks/lib/tz'
-import { blockReason, gatePrompt, measureToast, parseSnooze, toastText } from '../hooks/lib/warnings'
+import { blockReason, gatePrompt, isGated, measureToast, parseSnooze, toastText } from '../hooks/lib/warnings'
 import type { Ledger } from '../hooks/lib/warnings'
 
 const tz = fixedOffsetTz(180)
@@ -116,24 +117,37 @@ test('gate', async () => {
   const b = at(43)
   const mode = (m: Config['mode']): Config => ({ ...cfg, mode: m })
 
-  const blocked = gatePrompt(b, mode('block'), null, now, false)
+  const blocked = gatePrompt(b, mode('block'), null, now)
   expect(blocked).toEqual({
     drop: "Over today's budget (43% of 39% allowed by tonight). To continue: /budget snooze 1h",
   })
   expect(blockReason(b)).toBe("Over today's budget (43% of 39% allowed by tonight). To continue: /budget snooze 1h")
 
-  expect(gatePrompt(b, mode('rewarn'), null, now, false)).toEqual({ toast: 'over' })
-  expect(gatePrompt(b, mode('warn'), null, now, false)).toBe(null)
-  expect(gatePrompt(b, mode('block'), null, now, true)).toBe(null)
-  expect(gatePrompt(b, mode('rewarn'), null, now, true)).toBe(null)
-  expect(gatePrompt(b, mode('block'), now + HOUR_MS, now, false)).toBe(null)
-  expect(gatePrompt(b, mode('rewarn'), now + HOUR_MS, now, false)).toBe(null)
-  expect(gatePrompt(null, mode('block'), null, now, false)).toBe(null)
-  expect(gatePrompt(at(100), mode('block'), null, now, false)).toBe(null)
-  expect(gatePrompt(at(37), mode('block'), null, now, false)).toBe(null)
-  expect(gatePrompt(at(20), mode('block'), null, now, false)).toBe(null)
+  expect(gatePrompt(b, mode('rewarn'), null, now)).toEqual({ toast: 'over' })
+  expect(gatePrompt(b, mode('warn'), null, now)).toBe(null)
+  expect(gatePrompt(b, mode('block'), now + HOUR_MS, now)).toBe(null)
+  expect(gatePrompt(b, mode('rewarn'), now + HOUR_MS, now)).toBe(null)
+  expect(gatePrompt(null, mode('block'), null, now)).toBe(null)
+  expect(gatePrompt(at(100), mode('block'), null, now)).toBe(null)
+  expect(gatePrompt(at(37), mode('block'), null, now)).toBe(null)
+  expect(gatePrompt(at(20), mode('block'), null, now)).toBe(null)
   // A snooze that has run out no longer lets the prompt through.
-  expect(gatePrompt(b, mode('block'), now, now, false)).toEqual({ drop: blockReason(b) })
+  expect(gatePrompt(b, mode('block'), now, now)).toEqual({ drop: blockReason(b) })
+})
+
+test('only the person\'s own next message is gated', async () => {
+  const typed = { origin: { kind: 'composer' } } as const
+  expect(isGated(typed)).toBe(true)
+  expect(isGated({})).toBe(true)
+  expect(isGated({ origin: { kind: 'sdk' } })).toBe(true)
+  expect(isGated({ ...typed, isMeta: true })).toBe(false)
+  expect(isGated({ ...typed, command: { name: 'budget-config', args: '' } })).toBe(false)
+  expect(isGated({ ...typed, command: { name: 'compact', args: '' } })).toBe(true)
+  expect(isGated({ ...typed, turnId: 't1' })).toBe(false)
+  expect(isGated({ origin: { kind: 'observer' } })).toBe(false)
+  expect(isGated({ origin: { kind: 'auto-continuation' } })).toBe(false)
+  // A kind added after this was written is not the person's.
+  expect(isGated({ origin: { kind: 'future-kind' } as unknown as PromptOrigin })).toBe(false)
 })
 
 test('parseSnooze', async () => {

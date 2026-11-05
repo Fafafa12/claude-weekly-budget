@@ -19,7 +19,7 @@ import {
 } from './lib/store'
 import { fixedOffsetTz, systemTz } from './lib/tz'
 import type { Tz } from './lib/tz'
-import { gatePrompt, measureToast, parseSnooze, toastText } from './lib/warnings'
+import { gatePrompt, isGated, measureToast, parseSnooze, toastText } from './lib/warnings'
 import type { Gate, Toast } from './lib/warnings'
 
 // This session's view of the plugin's state, for the panes to draw from. The
@@ -194,12 +194,13 @@ export async function onMeasure($: EngineInterface, rateLimits: readonly Session
   await refresh($)
 }
 
-// What to do with a prompt about to be sent. It decides on the shared reading, so
-// the first message of a new chat is held back too.
+// What to do with a prompt about to be sent. Whether it is one to gate at all is
+// decided first, so the prompts that pass untouched cost no store reads. It
+// decides on the shared reading, so the first message of a new chat is held back too.
 export async function onPrompt($: EngineInterface, e: PromptSubmitInput): Promise<Gate> {
-  const isExempt = e.isMeta === true || (e.command?.name ?? '').startsWith('budget')
+  if (!isGated(e)) return null
   const { now, cfg, snoozedUntil, budget } = await loadView($)
-  return gatePrompt(budget, cfg, snoozedUntil, now, isExempt)
+  return gatePrompt(budget, cfg, snoozedUntil, now)
 }
 
 // The toast a re-warn gate asks for, worded for where the budget stands now.
