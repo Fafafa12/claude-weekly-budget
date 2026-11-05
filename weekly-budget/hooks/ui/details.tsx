@@ -1,14 +1,17 @@
-import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
+import type { EngineInterface, RenderElement, RenderInput, ThemeKey } from 'claude-code'
 
 import { applySnooze, currentBudget, resolveTz } from '../controller'
 import { DAY_NAMES, dayShares } from '../lib/config'
 import type { Config, Weekday } from '../lib/config'
 import { countdown, pct, todayText } from '../lib/format'
+import type { BudgetState } from '../lib/plan'
 import { NO_READING_TEXT, renderBar } from './shared'
 
 const MIN_MS = 60_000
 
 const MON_TO_SUN: readonly Weekday[] = [1, 2, 3, 4, 5, 6, 0]
+// Theme keys, so that the state follows Claude's theme on each surface.
+const STATE_COLORS: Record<BudgetState, ThemeKey> = { ok: 'success', near: 'warning', over: 'error', limit: 'error' }
 const MODE_NAMES: Record<Config['mode'], string> = { warn: 'warn', rewarn: 're-warn', block: 'block' }
 
 // "Mon 18 · Tue 18 · … · Sun 5": each weekday's share of the week, in week order.
@@ -51,9 +54,9 @@ export async function renderDetails($: EngineInterface, e: RenderInput<'Pane'>):
         <Box flexDirection="column">
           <Text>{`Used ${pct(budget.used)}%`}</Text>
           <Text>{`Allowed by tonight ${pct(budget.allowed)}%`}</Text>
-          <Text>{todayText(budget)}</Text>
+          <Text color={STATE_COLORS[budget.state]}>{todayText(budget)}</Text>
         </Box>
-        <Text>
+        <Text color="claude">
           {`Resets ${DAY_NAMES[tz.weekday(budget.resetMs)]} ${tz.hhmm(budget.resetMs)} (in ${countdown(budget.resetMs - now)})`}
         </Text>
       </Box>

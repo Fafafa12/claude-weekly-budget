@@ -124,6 +124,37 @@ for (const surface of SURFACES) {
   })
 }
 
+// The panes follow Claude's theme through its colour keys, not fixed colours.
+const STATE_COLORS = [
+  { used: 33, color: 'success', text: '6% left today' },
+  { used: 37, color: 'warning', text: '2% left today' },
+  { used: 43, color: 'error', text: '4% over today' },
+  { used: 100, color: 'error', text: 'weekly limit reached' },
+] as const
+for (const surface of SURFACES) {
+  for (const { used, color, text } of STATE_COLORS) {
+    test(`today's line is ${color} at ${used}% on ${surface}`, async ($, on) => {
+      engine(on, { store: { config: pinned, lastReading: reading(used) } })
+
+      const ui = await $.ui.mount({ ...PANE, surface })
+
+      const today = await ui.find({ type: 'Text', text: /left today|over today|limit reached/ })
+      expect(today?.text).toBe(text)
+      expect(today?.props.color).toBe(color)
+      await ui.unmount()
+    })
+  }
+
+  test(`the reset line is accented in Claude's colour on ${surface}`, async ($, on) => {
+    engine(on)
+
+    const ui = await $.ui.mount({ ...PANE, surface })
+
+    expect((await ui.find({ type: 'Text', text: /Resets/ }))?.props.color).toBe('claude')
+    await ui.unmount()
+  })
+}
+
 test('terminal has no Svg', async ($, on) => {
   engine(on)
 
