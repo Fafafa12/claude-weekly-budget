@@ -79,6 +79,13 @@ export async function refresh($: EngineInterface): Promise<void> {
   $.ui.invalidate('ui.render')
 }
 
+// For a refresh nobody awaits (the session start, the minute tick): a failing
+// store or a reload mid-refresh must not surface as an unhandled rejection, and
+// the next tick tries again.
+export async function refreshQuietly($: EngineInterface): Promise<void> {
+  await refresh($).catch(() => {})
+}
+
 // A new reading: keep it, share it, toast if it calls for one, and redraw.
 export async function onMeasure($: EngineInterface, rateLimits: readonly SessionRateLimit[]): Promise<void> {
   const now = await $.clock.now()

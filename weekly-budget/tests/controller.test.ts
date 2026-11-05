@@ -149,6 +149,18 @@ test('block drops the next message from a shared reading', async ($, on) => {
   expect(calls.toasts).toEqual([])
 })
 
+// No session.start, and nothing else that refreshes: this session's own state holds
+// no reading, so the drop can only come from the reading another session shared.
+test('block drops from a shared reading before this session has refreshed', async ($, on) => {
+  const { calls } = engine(on, { store: blocking })
+
+  const result = await submit($)
+
+  expect(result).toEqual({ drop: blockReason(budgetAt(43)) })
+  expect(result.drop).toContain('/budget snooze 1h')
+  expect(calls.statuses).toEqual([])
+})
+
 test('block lets /budget commands through', async ($, on) => {
   const { clock } = engine(on, { store: blocking })
 
@@ -197,6 +209,19 @@ test('a failing store lets the message through', async ($, on) => {
 
   expect(result.drop).toBeUndefined()
   expect(result.text).toBe('hi')
+})
+
+test('a failing store breaks neither the session start nor the tick', async ($, on) => {
+  const { calls, clock } = engine(on, { store: null })
+  on('store.get', () => ({ deny: 'store is down' }))
+
+  // The refreshes it starts reject; the kit fails the file on a rejection nobody handled.
+  await start($, clock)
+  await clock.advance(60_000)
+  await $.session.attach({ surface: 'terminal', clientId: 'terminal:default' })
+
+  expect(calls.registered).toEqual(['budget', 'budget-config'])
+  expect(calls.statuses).toEqual([])
 })
 
 test('snooze command unblocks', { plugins: [probe] }, async ($, on) => {

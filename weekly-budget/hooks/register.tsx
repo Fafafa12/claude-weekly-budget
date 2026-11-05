@@ -1,6 +1,6 @@
 import type { Register } from 'claude-code'
 
-import { onMeasure, onPrompt, refresh, runBudgetCommand, showToast } from './controller'
+import { onMeasure, onPrompt, refreshQuietly, runBudgetCommand, showToast } from './controller'
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -12,8 +12,8 @@ export const register: Register = on => {
       name: 'budget-config',
       description: 'Set your weekly Claude budget plan and warnings',
     })
-    $.clock.every(60_000, () => void refresh($))
-    void refresh($)
+    $.clock.every(60_000, () => void refreshQuietly($))
+    void refreshQuietly($)
 
     return next(e)
   })
@@ -21,7 +21,7 @@ export const register: Register = on => {
   // The surface that attached may be the first to draw, or the terminal.
   on('session.attach', async ($, e, next) => {
     const attached = await next(e)
-    await refresh($)
+    await refreshQuietly($)
 
     return attached
   })
