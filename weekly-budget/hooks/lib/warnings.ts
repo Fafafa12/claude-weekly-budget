@@ -54,12 +54,16 @@ export function measureToast(
 // there is not documented, so sdk and unclassified count too: block must hold there.
 const PERSON_ORIGINS: readonly string[] = ['composer', 'bridge', 'sdk', 'slack-ping', 'unclassified']
 
+// What isGated reads of a prompt.submit input; the origin may be missing.
+type GateInput = Pick<PromptSubmitInput, 'isMeta' | 'command' | 'turnId'> & { origin?: PromptOrigin }
+
 // Whether block and re-warn apply to a prompt: only to the person's own next
-// message, sent while nothing runs. A meta prompt, a /budget command, a prompt
-// delivered into a running turn (turnId), and one nobody typed (a notification, a
-// schedule, another session, a plugin, any kind added later) pass untouched: such
-// a prompt has no box to go back to, and a dropped one is lost.
-export function isGated(e: Pick<PromptSubmitInput, 'isMeta' | 'command' | 'turnId'> & { origin?: PromptOrigin }): boolean {
+// message, sent while nothing runs. A meta prompt and a /budget command pass
+// untouched, and so do a prompt delivered into a running turn (turnId), which is
+// part of a task already going, and one nobody typed (a notification, a schedule,
+// another session, a plugin, any kind added later), which has no box to go back
+// to, so that dropping it would lose it.
+export function isGated(e: GateInput): boolean {
   if (e.isMeta === true || (e.command?.name ?? '').startsWith('budget')) return false
   if (e.turnId !== undefined) return false
   return e.origin === undefined || PERSON_ORIGINS.includes(e.origin.kind)

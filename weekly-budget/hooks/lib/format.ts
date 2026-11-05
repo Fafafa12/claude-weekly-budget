@@ -105,5 +105,6 @@ export function statusLine(
 
 export function paneTitle(b: Budget | null, staleSince: number | null, tz: Tz, now: number): string {
   if (b === null) return 'Weekly budget · no reading yet'
-  return `${stateGlyph(b.state)} ${pct(b.used)}% of ${pct(b.allowed)}% · ${todayText(b)}${staleMark(staleSince, tz, now)}`
+  const summary = `${stateGlyph(b.state)} ${pct(b.used)}% of ${pct(b.allowed)}% · ${todayText(b)}`
+  return `${summary}${staleMark(staleSince, tz, now)}`
 }

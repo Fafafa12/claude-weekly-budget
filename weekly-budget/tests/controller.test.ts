@@ -465,7 +465,7 @@ test('a measure after a response re-dates the same figures', { plugins: [probe] 
 
 // Only this session's own reading keeps its time: one another session shared is
 // not what this session measured, so the same figures here are this session's, now.
-test('a context-only measure re-dates figures this session has not measured before', { plugins: [probe] }, async ($, on) => {
+test('a context-only measure re-dates figures this session never measured', { plugins: [probe] }, async ($, on) => {
   const { calls, clock } = engine(on, { store: { config: pinned, lastReading: reading(33, now - HOUR_MS) } })
 
   await start($, clock)
@@ -490,7 +490,7 @@ test('no measure toast on figures an hour old', async ($, on) => {
   expect(calls.toasts).toEqual([toastText('over', budgetAtTime(43, now + HOUR_MS))])
 })
 
-test('a measure from a window that is over does not replace the shared reading', { plugins: [probe] }, async ($, on) => {
+test('a measure from a window that is over keeps the shared reading', { plugins: [probe] }, async ($, on) => {
   engine(on, { store: { config: pinned, lastReading: reading(33) } })
 
   await measure($, 50, now - HOUR_MS)

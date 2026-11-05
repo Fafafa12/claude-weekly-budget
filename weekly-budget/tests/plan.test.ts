@@ -135,13 +135,14 @@ test('computeBudget at Thu 15:00', async () => {
 // Wed and Thu allow 35%, which the sums make 34.99999999999999.
 const fri30: Config = { ...DEFAULT_CONFIG, pins: [{ days: [5], percent: 30 }] }
 const fri30Reset = Date.parse('2026-11-10T00:00:00Z')
+const utc = fixedOffsetTz(0)
 
 test('using exactly what the plan allows is not over, through float noise', async () => {
-  const b = computeBudget({ percentUsed: 35, resetsMs: fri30Reset, at: now }, fri30, now, fixedOffsetTz(0))
-  expect(r6(b.allowed)).toBe(35)
-  expect(b.state).toBe('near')
+  const at = (used: number) => computeBudget({ percentUsed: used, resetsMs: fri30Reset, at: now }, fri30, now, utc)
+  expect(r6(at(35).allowed)).toBe(35)
+  expect(at(35).state).toBe('near')
   // Just past what float noise makes is over.
-  expect(computeBudget({ percentUsed: 35.1, resetsMs: fri30Reset, at: now }, fri30, now, fixedOffsetTz(0)).state).toBe('over')
+  expect(at(35.1).state).toBe('over')
 })
 
 test('computeBudget clamps today to the window', async () => {

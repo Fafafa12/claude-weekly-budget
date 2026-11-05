@@ -32,8 +32,8 @@ async function snoozeFor($: EngineInterface, span: Span): Promise<void> {
 
 // The body of the details pane, which /budget opens: the numbers (marked last known
 // when the reading is stale), when the week resets, the plan, the mode, and the
-// snooze with its buttons. The plan, the mode
-// and the snooze come from the config and the store, so they show with no reading too.
+// snooze with its buttons. The plan, the mode and the snooze come from the config
+// and the store, so they show with no reading too.
 export async function renderDetails($: EngineInterface, e: RenderInput<'Pane'>): Promise<RenderElement> {
   const { Box, Button, Text } = $.ui.resolve(e)
   const { budget, staleSince, cfg, snoozedUntil, tz, now } = await currentBudget($)
