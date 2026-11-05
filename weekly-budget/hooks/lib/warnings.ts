@@ -59,21 +59,22 @@ const PERSON_ORIGINS: readonly string[] = ['composer', 'bridge', 'slack-ping']
 const SURFACE_ORIGINS: readonly string[] = ['sdk', 'unclassified']
 
 // What isGated reads of a prompt.submit input; the origin may be missing.
-type GateInput = Pick<PromptSubmitInput, 'isMeta' | 'command' | 'turnId'> & { origin?: PromptOrigin }
+type GateInput = Pick<PromptSubmitInput, 'isMeta' | 'command' | 'turnId'> & { wait?: boolean; origin?: PromptOrigin }
 
 // Whether isGated's answer for this prompt depends on the session drawing somewhere.
 export const dependsOnSurface = (e: GateInput): boolean => SURFACE_ORIGINS.includes(e.origin?.kind ?? '')
 
 // Whether block and re-warn apply to a prompt: only to the person's own next
-// message, sent while nothing runs. A meta prompt and a /budget command pass
-// untouched, and so do a prompt delivered into a running turn (turnId), which is
-// part of a task already going, and one nobody typed (a notification, a schedule,
-// another session, a plugin, any kind added later), which has no box to go back
-// to, so that dropping it would lose it. hasSurface, whether the session draws on
+// message. A meta prompt and a /budget command pass untouched, and so do a prompt
+// delivered into a running turn (turnId), which is part of a task already going,
+// and one nobody typed (a notification, a schedule, another session, a plugin, any
+// kind added later), which has no box to go back to, so that dropping it would
+// lose it. A prompt typed during a turn but queued to wait its turn (wait) runs as
+// the next one: it is the next message. hasSurface, whether the session draws on
 // any surface, is read only for the kinds dependsOnSurface names.
 export function isGated(e: GateInput, hasSurface: boolean): boolean {
   if (e.isMeta === true || (e.command?.name ?? '').startsWith('budget')) return false
-  if (e.turnId !== undefined) return false
+  if (e.turnId !== undefined && e.wait !== true) return false
   if (e.origin === undefined || PERSON_ORIGINS.includes(e.origin.kind)) return true
   return hasSurface && SURFACE_ORIGINS.includes(e.origin.kind)
 }

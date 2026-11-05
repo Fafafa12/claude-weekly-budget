@@ -144,6 +144,10 @@ test('only the person\'s own next message is gated', async () => {
   expect(isGated({ ...typed, command: { name: 'budget-config', args: '' } }, true)).toBe(false)
   expect(isGated({ ...typed, command: { name: 'compact', args: '' } }, true)).toBe(true)
   expect(isGated({ ...typed, turnId: 't1' }, true)).toBe(false)
+  expect(isGated({ ...typed, turnId: 't1', wait: false }, true)).toBe(false)
+  // Queued to run as the next turn, it is the next message.
+  expect(isGated({ ...typed, turnId: 't1', wait: true }, true)).toBe(true)
+  expect(isGated({ origin: { kind: 'peer' }, turnId: 't1', wait: true }, true)).toBe(false)
   expect(isGated({ origin: { kind: 'observer' } }, true)).toBe(false)
   expect(isGated({ origin: { kind: 'auto-continuation' } }, true)).toBe(false)
   // A kind added after this was written is not the person's.

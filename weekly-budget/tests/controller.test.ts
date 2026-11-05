@@ -202,7 +202,7 @@ const passing = [
   { label: 'a plugin', origin: { kind: 'plugin', name: 'other-plugin' } },
   { label: 'a message typed into a running turn', origin: { kind: 'composer' }, turnId: 't1' },
 ] as const
-const fromOrigin = ($: Engine, input: { origin?: PromptOrigin; turnId?: string }) =>
+const fromOrigin = ($: Engine, input: { origin?: PromptOrigin; turnId?: string; wait?: boolean }) =>
   $.prompt.submit({ text: 'hi', wait: false, ...input } as PromptSubmitInput)
 
 for (const { label, ...input } of passing) {
@@ -224,6 +224,32 @@ for (const { label, ...input } of passing) {
     expect(calls.toasts).toEqual([])
   })
 }
+
+// A message typed while a turn runs and queued to wait its turn (ctrl+x enter) runs
+// as the next turn: it is the next message, so it is held back like any other.
+test('block drops a message queued to run after the running turn', async ($, on) => {
+  engine(on, { store: blocking })
+
+  const result = await fromOrigin($, { origin: { kind: 'composer' }, turnId: 't1', wait: true })
+
+  expect(result.drop).toContain('/budget snooze 1h')
+})
+
+test('rewarn toasts on a message queued to run after the running turn', async ($, on) => {
+  const { calls } = engine(on, { store: { config: { ...pinned, mode: 'rewarn' }, lastReading: reading(43) } })
+
+  await fromOrigin($, { origin: { kind: 'composer' }, turnId: 't1', wait: true })
+
+  expect(calls.toasts).toEqual([toastText('over', budgetAt(43))])
+})
+
+test('a task notification queued to wait still passes', async ($, on) => {
+  engine(on, { store: blocking })
+
+  const result = await fromOrigin($, { origin: { kind: 'task-notification' }, turnId: 't1', wait: true })
+
+  expect(result.drop).toBeUndefined()
+})
 
 test('a prompt that passes untouched reads nothing from the store', async ($, on) => {
   engine(on, { store: null })
