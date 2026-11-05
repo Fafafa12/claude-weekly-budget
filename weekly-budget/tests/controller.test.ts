@@ -253,6 +253,22 @@ for (const { label, origin } of held) {
   })
 }
 
+// Fri 30% in UTC with the window from Tue 00:00: Thu allows 35%, which the sums
+// make 34.99999999999999. Using exactly that is not over.
+test('block lets a message through at exactly what the plan allows', async ($, on) => {
+  const fri30: Config = { ...DEFAULT_CONFIG, mode: 'block', pins: [{ days: [5], percent: 30 }] }
+  const { calls } = engine(on, {
+    store: { config: fri30, lastReading: reading(35, now, Date.parse('2026-11-10T00:00:00Z')) },
+    env: { WEEKLY_BUDGET_TZ_OFFSET_MIN: '0' },
+  })
+
+  const result = await submit($)
+
+  expect(result.drop).toBeUndefined()
+  expect(result.text).toBe('hi')
+  expect(calls.toasts).toEqual([])
+})
+
 test('block fails open with no reading', async ($, on) => {
   const { calls, clock } = engine(on, { store: { config: { ...pinned, mode: 'block' } } })
 

@@ -58,6 +58,11 @@ test('textBar shows over even when it is less than a cell', async () => {
   expect(textBar(39, 39)).toBe('████████│░░░░░░░░░░░')
 })
 
+test('textBar shows no over for float noise', async () => {
+  expect(textBar(35, 34.99999999999999)).toBe(textBar(35, 35))
+  expect(textBar(35, 34.99999999999999)).not.toContain('▓')
+})
+
 test('textBar keeps the mark inside the bar', async () => {
   expect(textBar(0, 100)).toBe('░░░░░░░░░░░░░░░░░░░│')
   expect(textBar(0, 0, 10)).toBe('│░░░░░░░░░')
@@ -100,6 +105,23 @@ test('statusLine marks a stale reading with the time of it', async () => {
   expect(statusLine(at(100), 'C', staleSince, tz, now)).toBe(
     '🔴 Weekly limit reached · resets in 5d 5h · as of 10:44',
   )
+})
+
+test('used equal to allowed through float noise reads as left, not over', async () => {
+  // Fri 30% in UTC with the window from Tue 00:00: Thu allows 35%, as 34.99999999999999.
+  const fri30: Config = { ...DEFAULT_CONFIG, pins: [{ days: [5], percent: 30 }] }
+  const utc = fixedOffsetTz(0)
+  const b = computeBudget({ percentUsed: 35, resetsMs: Date.parse('2026-11-10T00:00:00Z'), at: now }, fri30, now, utc)
+  expect(todayText(b)).toBe('0% left today')
+  expect(statusLine(b, 'A', null, utc, now)).toBe('🟡 Week 35% / 35% allowed · today 0% left')
+  expect(statusLine(b, 'C', null, utc, now)).toBe('🟡 0% left today')
+})
+
+test('the state, not the sign of left, decides left or over', async () => {
+  // A budget a hair under what it allows, yet not over: never "0% over".
+  const hair = { ...at(39), left: -1e-12, state: 'near' as const }
+  expect(todayText(hair)).toBe('0% left today')
+  expect(statusLine(hair, 'A', null, tz, now)).toBe('🟡 Week 39% / 39% allowed · today 0% left')
 })
 
 test('paneTitle', async () => {

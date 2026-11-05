@@ -1,4 +1,5 @@
 import type { StatusStyle } from './config'
+import { EPS } from './plan'
 import type { Budget, BudgetState } from './plan'
 import type { Tz } from './tz'
 
@@ -25,9 +26,15 @@ export function stateGlyph(s: BudgetState): string {
   }
 }
 
+// Today's balance, "6% left" or "4% over", as the state has it rather than the sign
+// of left: float noise may leave a budget that is not over a hair below zero.
+function balance(b: Budget): string {
+  return b.state === 'over' ? `${pct(-b.left)}% over` : `${pct(Math.max(0, b.left))}% left`
+}
+
 export function todayText(b: Budget): string {
   if (b.state === 'limit') return 'weekly limit reached'
-  return b.left >= 0 ? `${pct(b.left)}% left today` : `${pct(-b.left)}% over today`
+  return `${balance(b)} today`
 }
 
 // The two largest units that are not zero-padded away: "5d 9h", "9h 5m", "45m".
@@ -47,7 +54,7 @@ export function countdown(ms: number): string {
 export function textBar(used: number, allowed: number, cells = 20): string {
   const markAt = Math.min(cells - 1, Math.round((allowed / 100) * cells))
   const usedCells = Math.round((used / 100) * cells)
-  const overCells = used > allowed ? Math.max(usedCells - markAt - 1, 1) : 0
+  const overCells = used > allowed + EPS ? Math.max(usedCells - markAt - 1, 1) : 0
   let bar = ''
   for (let i = 0; i < cells; i++) {
     if (i === markAt) bar += '│'
@@ -71,7 +78,7 @@ export function statusLine(
     return `🔴 Weekly limit reached · resets in ${countdown(b.resetMs - now)}${stale}`
   }
   const glyph = stateGlyph(b.state)
-  const today = `${pct(Math.abs(b.left))}% ${b.left >= 0 ? 'left' : 'over'}`
+  const today = balance(b)
   switch (style) {
     case 'A':
       return `${glyph} Week ${pct(b.used)}% / ${pct(b.allowed)}% allowed · today ${today}${stale}`

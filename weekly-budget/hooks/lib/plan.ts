@@ -9,6 +9,10 @@ export type { Reading }
 const DAY_MS = 24 * 60 * 60 * 1000
 const WEEK_MS = 7 * DAY_MS
 
+// How far apart two percents may be and still be the same: sums of shares carry
+// float noise (35 can come out as 34.99999999999999), and that is not being over.
+export const EPS = 1e-9
+
 export type BudgetState = 'ok' | 'near' | 'over' | 'limit'
 // A stretch of the window inside one local calendar day.
 export type Piece = { weekday: Weekday; startMs: number; endMs: number; share: number }
@@ -77,8 +81,8 @@ export function computeBudget(r: Reading, cfg: Config, now: number, tz: Tz): Bud
 
   let state: BudgetState = 'ok'
   if (r.percentUsed >= 100) state = 'limit'
-  else if (left < 0) state = 'over'
-  else if (left <= cfg.headsUpFraction * todayShare) state = 'near'
+  else if (left < -EPS) state = 'over'
+  else if (left <= cfg.headsUpFraction * todayShare + EPS) state = 'near'
 
   return {
     used: r.percentUsed,
