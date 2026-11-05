@@ -1,4 +1,4 @@
-import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
+import type { ElementTable, EngineInterface, RenderElement, RenderInput } from 'claude-code'
 
 import {
   applyCompactPanel,
@@ -16,36 +16,33 @@ import { planLine } from './shared'
 
 type Choice<V extends string = string> = { value: V; label: string }
 
-// What a Select is given: the value and the label alone, whatever else a table keeps.
-const optionsOf = (choices: readonly Choice[]): Choice[] => choices.map(({ value, label }) => ({ value, label }))
-
 // What a pin can be for: a group of days, or one.
 type PinGroup = Choice & { days: Weekday[] }
-const WEEKEND: PinGroup = { value: 'weekend', label: 'Weekend (Sat+Sun)', days: [6, 0] }
+const WEEKEND: PinGroup = { value: 'weekend', label: 'Weekend', days: [6, 0] }
 const PIN_GROUPS: readonly PinGroup[] = [
   WEEKEND,
-  { value: 'weekdays', label: 'Weekdays (Mon-Fri)', days: [1, 2, 3, 4, 5] },
-  { value: 'mon', label: 'Monday', days: [1] },
-  { value: 'tue', label: 'Tuesday', days: [2] },
-  { value: 'wed', label: 'Wednesday', days: [3] },
-  { value: 'thu', label: 'Thursday', days: [4] },
-  { value: 'fri', label: 'Friday', days: [5] },
-  { value: 'sat', label: 'Saturday', days: [6] },
-  { value: 'sun', label: 'Sunday', days: [0] },
+  { value: 'weekdays', label: 'Weekdays', days: [1, 2, 3, 4, 5] },
+  { value: 'mon', label: 'Mon', days: [1] },
+  { value: 'tue', label: 'Tue', days: [2] },
+  { value: 'wed', label: 'Wed', days: [3] },
+  { value: 'thu', label: 'Thu', days: [4] },
+  { value: 'fri', label: 'Fri', days: [5] },
+  { value: 'sat', label: 'Sat', days: [6] },
+  { value: 'sun', label: 'Sun', days: [0] },
 ]
 
 const MODES: readonly Choice<Mode>[] = [
   { value: 'warn', label: 'Warn once' },
-  { value: 'rewarn', label: 'Warn on every message' },
-  { value: 'block', label: 'Block next message' },
+  { value: 'rewarn', label: 'Every message' },
+  { value: 'block', label: 'Block' },
 ]
 
 // The heads-up is on at one of these fractions of today's share still left, or off.
 const HEADS_UPS: readonly (Choice & { fraction: number | null })[] = [
   { value: 'off', label: 'Off', fraction: null },
-  { value: '0.1', label: '10% of today left', fraction: 0.1 },
-  { value: '0.25', label: '25% of today left', fraction: 0.25 },
-  { value: '0.5', label: '50% of today left', fraction: 0.5 },
+  { value: '0.1', label: '10%', fraction: 0.1 },
+  { value: '0.25', label: '25%', fraction: 0.25 },
+  { value: '0.5', label: '50%', fraction: 0.5 },
 ]
 
 const STYLES: readonly Choice<StatusStyle>[] = [
@@ -135,6 +132,40 @@ async function setSnoozeOptions($: EngineInterface, text: string): Promise<void>
 const headsUpValue = (cfg: Config): string | undefined =>
   cfg.headsUpEnabled ? HEADS_UPS.find(h => h.fraction === cfg.headsUpFraction)?.value : 'off'
 
+const KEY_HINT = 'Tab or arrows to move · Enter to choose · Esc to go back to the prompt'
+
+// One setting as a row of choices, `<setting>-<value>` each: the chosen one in
+// Claude's colour, the others dim until the pointer or the focus is on them. A
+// press picks; the caller's `onPick` applies it.
+function choiceRow(
+  { Box, Button, Text }: ElementTable,
+  setting: string,
+  title: string,
+  options: readonly Choice[],
+  current: string | undefined,
+  onPick: (value: string) => void,
+): RenderElement {
+  return (
+    <Box flexDirection="row" flexWrap="wrap" alignItems="center" gap={1}>
+      <Text>{title}</Text>
+      {options.flatMap(({ value, label }, i) => {
+        const key = `${setting}-${value}`
+        const choice =
+          value === current ? (
+            <Button key={key} label={label} plain onPress={() => onPick(value)}>
+              <Text color="claude" bold>
+                {label}
+              </Text>
+            </Button>
+          ) : (
+            <Button key={key} label={label} plain dimColor onPress={() => onPick(value)} />
+          )
+        return i === 0 ? [choice] : [<Text dimColor>·</Text>, choice]
+      })}
+    </Box>
+  )
+}
+
 // Pins that add up to the whole week leave the other days nothing.
 function leavesDaysEmpty(pins: Pin[]): boolean {
   const total = pins.reduce((sum, pin) => sum + pin.percent, 0)
@@ -151,20 +182,16 @@ export async function renderSettings($: EngineInterface, e: RenderInput<'Pane'>)
     const { Text } = $.ui.resolve(e)
     return <Text dimColor>Open /budget-config in the terminal or VS Code to change the settings.</Text>
   }
-  const { Box, Button, Input, Select, Text } = $.ui.resolve(e)
+  const els = $.ui.resolve(e)
+  const { Box, Button, Input, Text } = els
   const [cfg, picked, error] = await Promise.all([loadConfig($), getPinDraftDays($), getSettingsError($)])
 
   return (
     <Box flexDirection="column" gap={1}>
+      {e.surface === 'terminal' && <Text dimColor>{KEY_HINT}</Text>}
       {error !== null && <Text color="error">{error}</Text>}
       <Box flexDirection="column">
-        <Select
-          key="pin-days"
-          label="Pin"
-          options={optionsOf(PIN_GROUPS)}
-          value={pinGroup(picked).value}
-          onSelect={days => setPinDraftDays($, days)}
-        />
+        {choiceRow(els, 'pin-days', 'Pin', PIN_GROUPS, pinGroup(picked).value, days => setPinDraftDays($, days))}
         <Input key="pin-percent" label="% of the week" placeholder="10" onSubmit={text => addPin($, text)} />
       </Box>
       <Box flexDirection="column">
@@ -176,26 +203,15 @@ export async function renderSettings($: EngineInterface, e: RenderInput<'Pane'>)
           <Button
             key={`remove-pin-${i}`}
             label={`Remove ${daysLabel(pin.days)} ${pct(pin.percent)}%`}
+            variant="secondary"
             onPress={() => removePin($, pin)}
           />
         ))}
-        <Button key="reset-plan" label="Reset plan" onPress={() => change($, { pins: [] })} />
+        <Button key="reset-plan" label="Reset plan" variant="secondary" onPress={() => change($, { pins: [] })} />
       </Box>
       <Box flexDirection="column">
-        <Select
-          key="mode"
-          label="Mode"
-          options={optionsOf(MODES)}
-          value={cfg.mode}
-          onSelect={value => pickMode($, value)}
-        />
-        <Select
-          key="heads-up"
-          label="Heads-up"
-          options={optionsOf(HEADS_UPS)}
-          value={headsUpValue(cfg)}
-          onSelect={value => pickHeadsUp($, value)}
-        />
+        {choiceRow(els, 'mode', 'Mode', MODES, cfg.mode, value => pickMode($, value))}
+        {choiceRow(els, 'heads-up', 'Heads-up (of today left)', HEADS_UPS, headsUpValue(cfg), value => pickHeadsUp($, value))}
         <Input
           key="snooze-options"
           label="Snooze options (minutes, comma-separated)"
@@ -204,20 +220,10 @@ export async function renderSettings($: EngineInterface, e: RenderInput<'Pane'>)
         />
       </Box>
       <Box flexDirection="column">
-        <Select
-          key="status-style"
-          label="Status line"
-          options={optionsOf(STYLES)}
-          value={cfg.statusStyle}
-          onSelect={value => pickStyle($, value)}
-        />
-        <Select
-          key="compact-panel"
-          label="Compact panel (VS Code)"
-          options={optionsOf(PANEL)}
-          value={cfg.showCompactPanel ? 'on' : 'off'}
-          onSelect={value => applyCompactPanel($, value === 'on')}
-        />
+        {choiceRow(els, 'status-style', 'Status line', STYLES, cfg.statusStyle, value => pickStyle($, value))}
+        {choiceRow(els, 'compact-panel', 'Compact panel (VS Code)', PANEL, cfg.showCompactPanel ? 'on' : 'off', value =>
+          applyCompactPanel($, value === 'on'),
+        )}
       </Box>
     </Box>
   )

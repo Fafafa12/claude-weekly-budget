@@ -104,12 +104,25 @@ const PANE = {
 
 const SURFACES = ['terminal', 'vscode'] as const
 
+// A setting is a row of choice buttons keyed `<setting>-<value>`; the chosen one is
+// drawn at full strength, the others dim.
+type Found = { key?: string; props: Record<string, unknown> }
+type Drawn = { findAll: (query: { type: 'Button' }) => Promise<Found[]> }
+const choicesOf = async (ui: Drawn, setting: string): Promise<Found[]> =>
+  (await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith(`${setting}-`) && !b.key.startsWith('remove-'))
+const chosen = async (ui: Drawn, setting: string): Promise<string | undefined> => {
+  const on = (await choicesOf(ui, setting)).filter(b => b.props.dimColor !== true)
+  return on.length === 1 ? on[0]?.key?.slice(setting.length + 1) : undefined
+}
+const choices = async (ui: Drawn, setting: string) =>
+  (await choicesOf(ui, setting)).map(b => [b.key?.slice(setting.length + 1), b.props.label])
+
 for (const surface of SURFACES) {
   test(`add weekend pin on ${surface}`, { plugins: [probe] }, async ($, on) => {
     engine(on)
     const ui = await $.ui.mount({ ...PANE, surface })
 
-    await ui.select({ key: 'pin-days', value: 'weekend' })
+    await ui.press({ key: 'pin-days-weekend' })
     await ui.input({ key: 'pin-percent', text: '10' })
 
     expect((await storedConfig($)).pins).toEqual([{ days: [6, 0], percent: 10 }])
@@ -122,10 +135,10 @@ for (const surface of SURFACES) {
   test(`replace overlapping pin on ${surface}`, { plugins: [probe] }, async ($, on) => {
     engine(on)
     const ui = await $.ui.mount({ ...PANE, surface })
-    await ui.select({ key: 'pin-days', value: 'weekend' })
+    await ui.press({ key: 'pin-days-weekend' })
     await ui.input({ key: 'pin-percent', text: '10' })
 
-    await ui.select({ key: 'pin-days', value: 'sat' })
+    await ui.press({ key: 'pin-days-sat' })
     await ui.input({ key: 'pin-percent', text: '2' })
 
     expect((await storedConfig($)).pins).toEqual([{ days: [6], percent: 2 }])
@@ -139,7 +152,7 @@ for (const surface of SURFACES) {
     engine(on, { store: { config: weekdays95 } })
     const ui = await $.ui.mount({ ...PANE, surface })
 
-    await ui.select({ key: 'pin-days', value: 'sun' })
+    await ui.press({ key: 'pin-days-sun' })
     await ui.input({ key: 'pin-percent', text: '5' })
 
     expect((await storedConfig($)).pins).toEqual([
@@ -180,7 +193,7 @@ for (const surface of SURFACES) {
     engine(on, { store: { config: weekdays95 } })
     const ui = await $.ui.mount({ ...PANE, surface })
 
-    await ui.select({ key: 'pin-days', value: 'weekend' })
+    await ui.press({ key: 'pin-days-weekend' })
     await ui.input({ key: 'pin-percent', text: '10' })
 
     const shown = await ui.find({ type: 'Text', text: /more than 100%/ })
@@ -209,36 +222,36 @@ for (const surface of SURFACES) {
   test(`mode select on ${surface}`, { plugins: [probe] }, async ($, on) => {
     engine(on)
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ key: 'mode' }))?.props.value).toBe('warn')
+    expect((await chosen(ui, 'mode'))).toBe('warn')
 
-    await ui.select({ key: 'mode', value: 'block' })
+    await ui.press({ key: 'mode-block' })
 
     expect((await storedConfig($)).mode).toBe('block')
-    expect((await ui.find({ key: 'mode' }))?.props.value).toBe('block')
+    expect((await chosen(ui, 'mode'))).toBe('block')
     await ui.unmount()
   })
 
   test(`heads-up select on ${surface}`, { plugins: [probe] }, async ($, on) => {
     engine(on)
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ key: 'heads-up' }))?.props.value).toBe('0.25')
+    expect((await chosen(ui, 'heads-up'))).toBe('0.25')
 
-    await ui.select({ key: 'heads-up', value: 'off' })
+    await ui.press({ key: 'heads-up-off' })
     expect(await storedConfig($)).toMatchObject({ headsUpEnabled: false, headsUpFraction: 0.25 })
-    expect((await ui.find({ key: 'heads-up' }))?.props.value).toBe('off')
+    expect((await chosen(ui, 'heads-up'))).toBe('off')
 
-    await ui.select({ key: 'heads-up', value: '0.5' })
+    await ui.press({ key: 'heads-up-0.5' })
     expect(await storedConfig($)).toMatchObject({ headsUpEnabled: true, headsUpFraction: 0.5 })
-    expect((await ui.find({ key: 'heads-up' }))?.props.value).toBe('0.5')
+    expect((await chosen(ui, 'heads-up'))).toBe('0.5')
     await ui.unmount()
   })
 
   test(`status style select on ${surface}`, { plugins: [probe] }, async ($, on) => {
     engine(on)
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ key: 'status-style' }))?.props.value).toBe('B')
+    expect((await chosen(ui, 'status-style'))).toBe('B')
 
-    await ui.select({ key: 'status-style', value: 'C' })
+    await ui.press({ key: 'status-style-C' })
 
     expect((await storedConfig($)).statusStyle).toBe('C')
     await ui.unmount()
@@ -287,18 +300,18 @@ for (const surface of SURFACES) {
     await start($, clock, 'vscode')
     expect(calls.opens).toEqual([{ id: 'compact', title: expect.any(String), rows: 4 }])
     const ui = await $.ui.mount({ ...PANE, surface })
-    expect((await ui.find({ key: 'compact-panel' }))?.props.value).toBe('on')
+    expect((await chosen(ui, 'compact-panel'))).toBe('on')
 
-    await ui.select({ key: 'compact-panel', value: 'off' })
+    await ui.press({ key: 'compact-panel-off' })
 
     expect((await storedConfig($)).showCompactPanel).toBe(false)
     expect(calls.closes).toEqual([])
     expect(state.panes.map(p => p.id)).toEqual(['compact'])
     expect(calls.opens).toHaveLength(2)
     expect(calls.opens.at(-1)).toMatchObject({ id: 'compact', rows: 17 })
-    expect((await ui.find({ key: 'compact-panel' }))?.props.value).toBe('off')
+    expect((await chosen(ui, 'compact-panel'))).toBe('off')
 
-    await ui.select({ key: 'compact-panel', value: 'on' })
+    await ui.press({ key: 'compact-panel-on' })
 
     expect((await storedConfig($)).showCompactPanel).toBe(true)
     expect(calls.closes).toEqual([])
@@ -323,7 +336,7 @@ test('the weekend, weekdays and each day pin what their names say', { plugins: [
 
   for (const [value, days] of DAYS) {
     await ui.press({ key: 'reset-plan' })
-    await ui.select({ key: 'pin-days', value })
+    await ui.press({ key: `pin-days-${value}` })
     await ui.input({ key: 'pin-percent', text: '1' })
     expect((await storedConfig($)).pins).toEqual([{ days, percent: 1 }])
   }
@@ -333,12 +346,12 @@ test('the weekend, weekdays and each day pin what their names say', { plugins: [
 test('the days picked stay picked across redraws', async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect((await ui.find({ key: 'pin-days' }))?.props.value).toBe('weekend')
+  expect((await chosen(ui, 'pin-days'))).toBe('weekend')
 
-  await ui.select({ key: 'pin-days', value: 'thu' })
-  await ui.select({ key: 'mode', value: 'rewarn' })
+  await ui.press({ key: 'pin-days-thu' })
+  await ui.press({ key: 'mode-rewarn' })
 
-  expect((await ui.find({ key: 'pin-days' }))?.props.value).toBe('thu')
+  expect((await chosen(ui, 'pin-days'))).toBe('thu')
   await ui.unmount()
 })
 
@@ -346,38 +359,39 @@ test('the controls are labelled', async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
 
-  const options = async (key: string) =>
-    ((await ui.find({ key }))?.props.options as { value: string; label?: string }[]).map(o => [o.value, o.label])
   expect((await ui.find({ key: 'pin-percent' }))?.props.label).toBe('% of the week')
   expect((await ui.find({ key: 'snooze-options' }))?.props.label).toBe('Snooze options (minutes, comma-separated)')
-  expect(await options('mode')).toEqual([
+  expect(await choices(ui, 'mode')).toEqual([
     ['warn', 'Warn once'],
-    ['rewarn', 'Warn on every message'],
-    ['block', 'Block next message'],
+    ['rewarn', 'Every message'],
+    ['block', 'Block'],
   ])
-  expect(await options('heads-up')).toEqual([
+  expect(await choices(ui, 'heads-up')).toEqual([
     ['off', 'Off'],
-    ['0.1', '10% of today left'],
-    ['0.25', '25% of today left'],
-    ['0.5', '50% of today left'],
+    ['0.1', '10%'],
+    ['0.25', '25%'],
+    ['0.5', '50%'],
   ])
-  expect(await options('status-style')).toEqual([
+  expect(await choices(ui, 'status-style')).toEqual([
     ['A', 'Numbers'],
     ['B', 'Bar'],
     ['C', 'Minimal'],
   ])
-  expect((await options('pin-days')).map(([value]) => value)).toEqual([
-    'weekend',
-    'weekdays',
-    'mon',
-    'tue',
-    'wed',
-    'thu',
-    'fri',
-    'sat',
-    'sun',
+  expect(await choices(ui, 'pin-days')).toEqual([
+    ['weekend', 'Weekend'],
+    ['weekdays', 'Weekdays'],
+    ['mon', 'Mon'],
+    ['tue', 'Tue'],
+    ['wed', 'Wed'],
+    ['thu', 'Thu'],
+    ['fri', 'Fri'],
+    ['sat', 'Sat'],
+    ['sun', 'Sun'],
   ])
-  expect((await options('compact-panel')).map(([value]) => value)).toEqual(['on', 'off'])
+  expect(await choices(ui, 'compact-panel')).toEqual([
+    ['on', 'On'],
+    ['off', 'Off'],
+  ])
   await ui.unmount()
 })
 
@@ -386,7 +400,7 @@ test('a heads-up fraction the menu does not list selects nothing', async ($, on)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
 
-  expect((await ui.find({ key: 'heads-up' }))?.props.value).toBeUndefined()
+  expect((await chosen(ui, 'heads-up'))).toBeUndefined()
   await ui.unmount()
 })
 
@@ -481,8 +495,8 @@ test('switching the view does not reopen a pane the person closed', async ($, on
   state.panes = []
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
 
-  await ui.select({ key: 'compact-panel', value: 'off' })
-  await ui.select({ key: 'compact-panel', value: 'on' })
+  await ui.press({ key: 'compact-panel-off' })
+  await ui.press({ key: 'compact-panel-on' })
 
   expect(calls.opens.map(o => o.id)).toEqual(['compact'])
   expect(calls.closes).toEqual([])
@@ -494,7 +508,7 @@ test('switching the view with no pane up opens nothing', async ($, on) => {
   const { calls } = engine(on, { surfaces: ['vscode'] })
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
 
-  await ui.select({ key: 'compact-panel', value: 'off' })
+  await ui.press({ key: 'compact-panel-off' })
 
   expect(calls.opens).toEqual([])
   expect(calls.closes).toEqual([])
@@ -505,7 +519,7 @@ test('switching the panel on does not open one on the terminal', async ($, on) =
   const { calls } = engine(on, { store: { config: { ...DEFAULT_CONFIG, showCompactPanel: false } } })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
 
-  await ui.select({ key: 'compact-panel', value: 'on' })
+  await ui.press({ key: 'compact-panel-on' })
 
   expect(calls.opens).toEqual([])
   await ui.unmount()
@@ -516,7 +530,7 @@ test('other changes do not close the compact pane', async ($, on) => {
   await start($, clock, 'vscode')
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
 
-  await ui.select({ key: 'mode', value: 'block' })
+  await ui.press({ key: 'mode-block' })
   await ui.input({ key: 'pin-percent', text: '10' })
 
   expect(calls.closes).toEqual([])
@@ -527,7 +541,7 @@ test('a new plan reaches the status line', async ($, on) => {
   const { calls } = engine(on, { store: { lastReading: reading(33) } })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
 
-  await ui.select({ key: 'pin-days', value: 'weekend' })
+  await ui.press({ key: 'pin-days-weekend' })
   await ui.input({ key: 'pin-percent', text: '10' })
 
   expect(calls.statuses.at(-1)).toContain('33% → 39%')
@@ -540,7 +554,7 @@ test('/budget-config opens the settings pane', async ($, on) => {
   const result = await run($, 'budget-config')
 
   expect(result.text).toBe('Budget settings opened.')
-  expect(calls.opens).toEqual([{ id: 'settings', title: 'Weekly budget settings' }])
+  expect(calls.opens).toEqual([{ id: 'settings', title: 'Weekly budget settings', focus: true }])
 })
 
 test('the mobile app, which draws no field yet, is told where the settings are', async ($, on) => {
@@ -572,14 +586,9 @@ test('the settings show what is stored, with no reading', async ($, on) => {
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
 
-  const values = async (...keys: string[]) => Promise.all(keys.map(async key => (await ui.find({ key }))?.props.value))
-  expect(await values('mode', 'heads-up', 'status-style', 'snooze-options', 'compact-panel')).toEqual([
-    'rewarn',
-    'off',
-    'A',
-    '15, 90',
-    'off',
-  ])
+  const values = async (...settings: string[]) => Promise.all(settings.map(setting => chosen(ui, setting)))
+  expect(await values('mode', 'heads-up', 'status-style', 'compact-panel')).toEqual(['rewarn', 'off', 'A', 'off'])
+  expect((await ui.find({ key: 'snooze-options' }))?.props.value).toBe('15, 90')
   expect((await ui.find({ type: 'Text', text: /Plan:/ }))?.text).toContain('Sat 5 · Sun 5')
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
   await ui.unmount()
@@ -594,7 +603,7 @@ for (const surface of SURFACES) {
     engine(on, { store: { config: newer } })
     const ui = await $.ui.mount({ ...PANE, surface })
 
-    await ui.select({ key: 'mode', value: 'block' })
+    await ui.press({ key: 'mode-block' })
 
     const shown = await ui.find({ type: 'Text', text: /newer version/ })
     expect(shown?.text).toBe(NEWER)
@@ -613,9 +622,42 @@ test('a config of this version, or with no version, is still saved', { plugins: 
   engine(on, { store: { config: unversioned } })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
 
-  await ui.select({ key: 'mode', value: 'block' })
+  await ui.press({ key: 'mode-block' })
 
   expect((await storedConfig($)).mode).toBe('block')
   expect(await ui.find({ type: 'Text', text: /newer version/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+for (const surface of SURFACES) {
+  test(`choices are plain buttons, the chosen one at full strength, on ${surface}`, async ($, on) => {
+    engine(on, { store: { config: { ...DEFAULT_CONFIG, mode: 'block' } } })
+    const ui = await $.ui.mount({ ...PANE, surface })
+
+    expect(await ui.findAll({ type: 'Select' })).toEqual([])
+    const modes = await choicesOf(ui, 'mode')
+    expect(modes.every(b => b.props.plain === true)).toBe(true)
+    expect(modes.map(b => [b.key, b.props.dimColor === true])).toEqual([
+      ['mode-warn', true],
+      ['mode-rewarn', true],
+      ['mode-block', false],
+    ])
+    await ui.unmount()
+  })
+}
+
+test('in the terminal a hint says how to use the keys', async ($, on) => {
+  engine(on)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  expect((await ui.find({ type: 'Text', text: /Tab/ }))?.text).toBe('Tab or arrows to move · Enter to choose · Esc to go back to the prompt')
+  await ui.unmount()
+})
+
+test('VS Code, where a click does it, has no key hint', async ($, on) => {
+  engine(on)
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+
+  expect(await ui.find({ type: 'Text', text: /Tab or arrows/ })).toBeUndefined()
   await ui.unmount()
 })

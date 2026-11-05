@@ -647,11 +647,11 @@ test('switching the view keeps the details expanded', { plugins: [probe] }, asyn
   await panel.press({ key: 'details-toggle' })
   expect(calls.opens.at(-1)?.rows).toBe(EXPANDED_ROWS)
 
-  await settings.select({ key: 'compact-panel', value: 'off' })
+  await settings.press({ key: 'compact-panel-off' })
   expect(calls.opens.at(-1)).toEqual({ id: 'compact', title: titleAt(33), rows: EXPANDED_ROWS })
   expect(await panel.find({ key: 'details-toggle' })).toBeUndefined()
 
-  await settings.select({ key: 'compact-panel', value: 'on' })
+  await settings.press({ key: 'compact-panel-on' })
   expect(calls.opens.at(-1)).toEqual({ id: 'compact', title: titleAt(33), rows: EXPANDED_ROWS })
   expect((await panel.find({ key: 'details-toggle' }))?.props.label).toBe('▾ Details')
   expect((await panel.find({ type: 'Text', text: /Used 33%/ }))?.text).toBe('Used 33%')

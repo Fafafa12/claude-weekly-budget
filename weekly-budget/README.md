@@ -36,7 +36,7 @@ Re-warn and block act only on messages you send yourself. A message you type whi
 
 There is also an early **heads-up** for when little of today is left. By default it fires when 25% of today's share is left. You can pick 10%, 25% or 50%, or turn it off.
 
-At the weekly limit itself it shows 🔴 "Weekly limit reached", with no notification and no block, because Claude stops on its own.
+At the weekly limit itself it shows "Weekly limit reached", with no notification and no block, because Claude stops on its own.
 
 To get past a warning or a block, snooze. A snooze silences warnings and lets messages through in block mode. `/budget` and `/budget-config` are never blocked.
 
@@ -49,15 +49,15 @@ Block goes by the highest reading from any of your sessions in the current week,
 |  | Terminal | VS Code |
 | --- | --- | --- |
 | Always on | A status line under the prompt. | One panel above the chat box. It opens by itself when a chat starts. |
-| What it shows | A traffic-light glyph (🟢 on track, 🟡 heads-up, 🔴 over) and the numbers. Three styles: numbers, bar (the default, with a mark for what is allowed by tonight) and minimal. | The summary as the panel's title, with one bar for the week. Each day is as wide as its share of the plan, today is highlighted, and a marker shows what is allowed by tonight. Under the bar, the details. |
-| Details and settings | `/budget` and `/budget-config` open panes. Nothing opens by itself. | `/budget` opens the panel, and `/budget-config` the settings, with real dropdowns and fields. |
+| What it shows | The numbers in words ("6% left today", "2% over today"), with no coloured dots. Three styles: numbers, bar (the default, with a mark for what is allowed by tonight) and minimal. | The summary as the panel's title, with one bar for the week. Each day is as wide as its share of the plan, today is highlighted, and a marker shows what is allowed by tonight. Under the bar, the details. |
+| Details and settings | `/budget` and `/budget-config` open panes. Nothing opens by itself. The settings open focused: Tab or the arrows move, Enter chooses, Esc goes back to the prompt (ctrl+x tab comes back). | `/budget` opens the panel, and `/budget-config` the settings, each setting a row of choices you click, the chosen one in Claude orange. |
 | Making it smaller | Pick the minimal style. | Keep the compact view, or close the panel with its X, and it stays closed for that chat until you run `/budget`. |
 
-Claude Code draws the status line itself: it puts "⚠ weekly-budget:" in front and decides the colour, which is why the glyph carries the state. In VS Code the plugin shows the panel and no status line.
+Claude Code draws the status line itself: it puts "⚠ weekly-budget:" in front and decides the colour, which is why the words and the bar's ▓ (past what the plan allows) carry the state. In the panels the state reads as a coloured word: On track, Running low, Over today. In VS Code the plugin shows the panel and no status line.
 
 **The VS Code panel has two views**, which you choose with **Compact panel (VS Code)** in `/budget-config`:
 
-- **On (the default): the compact view.** The bar, with a "▸ Details" row under it. Click the row and the details open below the bar, and it reads "▾ Details". Click it again to fold them away.
+- **On (the default): the compact view.** The bar, with the state in a word and a quiet "▸ Details" link under it. Click the row and the details open below the bar, and it reads "▾ Details". Click it again to fold them away.
 - **Off: the full view.** The bar with the details always shown, and no toggle.
 
 The details are used, allowed by tonight, today's balance, when the week resets, your plan, the mode, and the snooze state with its buttons. Changing the view never closes the panel, and keeps what you opened with the toggle. The terminal is unchanged: `/budget` opens the details pane, and no panel opens by itself.

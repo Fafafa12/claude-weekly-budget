@@ -57,7 +57,8 @@ export const register: Register = on => {
   }))
 
   on('command.run', { command: 'budget-config' }, async $ => {
-    await $.ui.open({ id: 'settings', title: 'Weekly budget settings' })
+    // Focused, so that the terminal's keys reach the settings at once.
+    await $.ui.open({ id: 'settings', title: 'Weekly budget settings', focus: true })
 
     return { text: 'Budget settings opened.' }
   })
