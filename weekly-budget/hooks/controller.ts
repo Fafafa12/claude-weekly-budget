@@ -3,7 +3,7 @@ import type { EngineInterface, PromptSubmitInput, SessionRateLimit, UsageUnit } 
 
 import { validatePins } from './lib/config'
 import type { Config } from './lib/config'
-import { paneTitle, staleMark, statusLine } from './lib/format'
+import { staleMark, statusLine } from './lib/format'
 import { computeBudget, readingFrom } from './lib/plan'
 import type { Budget, Reading } from './lib/plan'
 import {
@@ -43,15 +43,18 @@ const COMPACT = 'compact'
 const COLLAPSED_ROWS = 4
 const EXPANDED_ROWS = 17
 
-// The panel as an open request. Titled with the summary, marked "as of" when the
-// reading is last known. The compact view (showCompactPanel) keeps its details
-// behind the toggle; the full view always shows them.
+// The host draws a pane's title in plain text, so the panel's only names it: the
+// summary, coloured by the state, is the panel's own first line.
+const COMPACT_TITLE = 'Weekly budget'
+
+// The panel as an open request. The compact view (showCompactPanel) keeps its
+// details behind the toggle; the full view always shows them.
 const compactPane = (
   v: { cfg: Config; budget: Budget | null; staleSince: number | null; tz: Tz; now: number },
   isExpanded: boolean,
 ) => ({
   id: COMPACT,
-  title: paneTitle(v.budget, v.staleSince, v.tz, v.now),
+  title: COMPACT_TITLE,
   rows: v.cfg.showCompactPanel && !isExpanded ? COLLAPSED_ROWS : EXPANDED_ROWS,
 })
 
@@ -112,10 +115,10 @@ export async function refresh($: EngineInterface): Promise<void> {
   $.ui.invalidate('ui.render')
 }
 
-// The panel above the VS Code chat: the summary is its title, and the host draws
-// that, so a changed title is a new open (which retitles). So is a changed height:
-// the view may have been switched by another session, and the engine's pane list has
-// no rows, which is why the rows last asked for are kept. The panes the engine lists
+// The panel above the VS Code chat, re-opened only for a changed height (or a title
+// that is not its own): the view may have been switched by another session, and the
+// engine's pane list has no rows, which is why the rows last asked for are kept. A
+// budget that moves only redraws it. The panes the engine lists
 // are the ones still up: one the person closed is not there, and stays closed.
 // Neither view closes it.
 async function syncCompact(
@@ -310,7 +313,7 @@ export async function runBudgetCommand($: EngineInterface, args: string): Promis
     if ((await $.session.surfaces()).some(s => s !== 'terminal')) {
       // The panel is how /budget answers here, so a store that cannot be read still
       // opens it, plainly titled and collapsed.
-      const plain = { id: COMPACT, title: 'Weekly budget', rows: COLLAPSED_ROWS }
+      const plain = { id: COMPACT, title: COMPACT_TITLE, rows: COLLAPSED_ROWS }
       await openCompact($, await currentCompactPane($).catch(() => plain))
       return 'Budget panel opened.'
     }
