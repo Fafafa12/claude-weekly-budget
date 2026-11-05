@@ -1,4 +1,4 @@
-import type { On, PromptOrigin, PromptSubmitInput, RenderSurface } from 'claude-code'
+import type { On, PromptOrigin, PromptSubmitInput, RenderSurface, UsageUnit } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock, Plugin } from 'claude-code/testing'
 
@@ -17,7 +17,9 @@ const reset = Date.parse('2026-11-10T17:00:00Z') // Tue 20:00 local
 // it is today's, so 33% is ok (6% left), 37% is near (2% left) and 43% is over.
 const pinned: Config = { ...DEFAULT_CONFIG, pins: [{ days: [6, 0], percent: 10 }] }
 const tz = fixedOffsetTz(180)
-const budgetAt = (used: number) => computeBudget({ percentUsed: used, resetsMs: reset, at: now }, pinned, now, tz)
+const budgetAtTime = (used: number, t: number) =>
+  computeBudget({ percentUsed: used, resetsMs: reset, at: t }, pinned, t, tz)
+const budgetAt = (used: number) => budgetAtTime(used, now)
 
 const reading = (percentUsed: number, at = now, resetsMs = reset) => ({ percentUsed, resetsMs, at })
 const sevenDay = (used: number, resetsMs = reset) => [
@@ -87,6 +89,9 @@ const start = async ($: Engine, clock: MockClock) => {
 }
 const measure = ($: Engine, used: number, resetsMs = reset) =>
   $.session.measure({ context: { window: 200_000 }, rateLimits: sevenDay(used, resetsMs), changed: ['rateLimits'] })
+// A measure that moved no rate limit: the context alone, or the cost too (a response came).
+const remeasure = ($: Engine, used: number, changed: UsageUnit[] = ['context']) =>
+  $.session.measure({ context: { window: 200_000 }, rateLimits: sevenDay(used), changed })
 const submit = ($: Engine, text = 'hi', command?: { name: string; args: string }) =>
   $.prompt.submit({ text, command, wait: false, origin: { kind: 'composer' } })
 const run = ($: Engine, command: string, args: string) =>
@@ -432,6 +437,74 @@ test('a measure shares its reading with other sessions', { plugins: [probe] }, a
   await measure($, 33)
 
   expect(await stored($, 'lastReading')).toEqual(reading(33))
+})
+
+// The rate limits a measure carries are the last response's. One raised because only
+// the context moved may carry figures an hour old: they are not re-dated as fresh.
+test('a context-only measure keeps the time of the figures it repeats', { plugins: [probe] }, async ($, on) => {
+  const { calls, clock } = engine(on, { store: { config: pinned } })
+
+  await measure($, 33)
+  await clock.advance(HOUR_MS)
+  await remeasure($, 33)
+
+  expect(await stored($, 'lastReading')).toEqual(reading(33, now))
+  expect(calls.statuses.at(-1)).toEndWith(' · as of 15:00')
+})
+
+test('a measure after a response re-dates the same figures', { plugins: [probe] }, async ($, on) => {
+  const { calls, clock } = engine(on, { store: { config: pinned } })
+
+  await measure($, 33)
+  await clock.advance(HOUR_MS)
+  await remeasure($, 33, ['context', 'cost'])
+
+  expect(await stored($, 'lastReading')).toEqual(reading(33, now + HOUR_MS))
+  expect(calls.statuses.at(-1)).not.toContain('as of')
+})
+
+// Only this session's own reading keeps its time: one another session shared is
+// not what this session measured, so the same figures here are this session's, now.
+test('a context-only measure re-dates figures this session has not measured before', { plugins: [probe] }, async ($, on) => {
+  const { calls, clock } = engine(on, { store: { config: pinned, lastReading: reading(33, now - HOUR_MS) } })
+
+  await start($, clock)
+  expect(calls.statuses.at(-1)).toEndWith(' · as of 14:00')
+  await remeasure($, 33)
+
+  expect(await stored($, 'lastReading')).toEqual(reading(33, now))
+  expect(calls.statuses.at(-1)).not.toContain('as of')
+})
+
+// Heads-up and over toasts need a fresh reading: the snooze ran out, but the figures
+// that are over are an hour old, so the toast waits for the next real reading.
+test('no measure toast on figures an hour old', async ($, on) => {
+  const { calls, clock } = engine(on, { store: { config: pinned, snooze: { until: now + 30 * 60e3 } } })
+
+  await measure($, 43)
+  await clock.advance(HOUR_MS)
+  await remeasure($, 43)
+  expect(calls.toasts).toEqual([])
+
+  await remeasure($, 43, ['context', 'cost'])
+  expect(calls.toasts).toEqual([toastText('over', budgetAtTime(43, now + HOUR_MS))])
+})
+
+test('a measure from a window that is over does not replace the shared reading', { plugins: [probe] }, async ($, on) => {
+  engine(on, { store: { config: pinned, lastReading: reading(33) } })
+
+  await measure($, 50, now - HOUR_MS)
+
+  expect(await stored($, 'lastReading')).toEqual(reading(33))
+})
+
+test('a lower reading in the same window does not replace a higher one', { plugins: [probe] }, async ($, on) => {
+  const higher = reading(40, now - 5 * 60e3)
+  engine(on, { store: { config: pinned, lastReading: higher } })
+
+  await measure($, 33)
+
+  expect(await stored($, 'lastReading')).toEqual(higher)
 })
 
 test('a measure without a weekly window changes nothing but the line', async ($, on) => {

@@ -11,7 +11,9 @@ import type { Ledger } from './warnings'
 //
 // `$` is only ever passed to these top-level functions, as the validator requires.
 
-// A reading older than this is shown as last known, and gets no toasts.
+// A reading older than this is shown as last known. The heads-up and over toasts a
+// measure raises need a fresh reading; re-warn may toast on the shared reading
+// however old, since a last-known "over" is a lower bound on being over.
 export const STALE_MS = 15 * 60e3
 
 const KEY = {
@@ -62,29 +64,31 @@ export async function loadSharedReading($: EngineInterface): Promise<Reading | n
   return { percentUsed: v.percentUsed, resetsMs: v.resetsMs, at: v.at }
 }
 
-// Writes when nothing is stored, when this reading is for another window, or when
-// it is newer than the stored one. Re-reads first because other sessions write too.
-export async function saveSharedReading($: EngineInterface, r: Reading): Promise<void> {
-  const stored = await loadSharedReading($)
-  if (stored === null || stored.resetsMs !== r.resetsMs || r.at > stored.at) {
-    await $.store.set(KEY.reading, r)
-  }
+// Whether r is a better bound than the other reading: the later window, and within
+// one window the higher figure (usage only goes up), then the later reading.
+function isBetter(r: Reading, than: Reading): boolean {
+  if (r.resetsMs !== than.resetsMs) return r.resetsMs > than.resetsMs
+  if (r.percentUsed !== than.percentUsed) return r.percentUsed > than.percentUsed
+  return r.at > than.at
 }
 
-// Which of this session's reading and the shared one to trust. A window that is
-// over is no use; between two live readings, the later window wins, and within
-// one window the later reading (usage only goes up, so it is the better bound).
+// Writes a reading whose window is still running when nothing is stored or when it
+// is the better bound (isBetter). Re-reads first because other sessions write too.
+export async function saveSharedReading($: EngineInterface, r: Reading, now: number): Promise<void> {
+  if (r.resetsMs <= now) return
+  const stored = await loadSharedReading($)
+  if (stored === null || isBetter(r, stored)) await $.store.set(KEY.reading, r)
+}
+
+// Which of this session's reading and the shared one to trust: a window that is
+// over is no use, and of two live readings the better bound (isBetter).
 export function pickReading(
   session: Reading | null,
   shared: Reading | null,
   now: number,
 ): { reading: Reading | null; staleSince: number | null } {
   const live = [session, shared].filter((r): r is Reading => r !== null && r.resetsMs > now)
-  const reading = live.reduce<Reading | null>((best, r) => {
-    if (best === null) return r
-    if (r.resetsMs !== best.resetsMs) return r.resetsMs > best.resetsMs ? r : best
-    return r.at > best.at ? r : best
-  }, null)
+  const reading = live.reduce<Reading | null>((best, r) => (best === null || isBetter(r, best) ? r : best), null)
   const staleSince = reading !== null && now - reading.at > STALE_MS ? reading.at : null
   return { reading, staleSince }
 }

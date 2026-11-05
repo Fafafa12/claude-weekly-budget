@@ -1,11 +1,11 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PromptSubmitInput, SessionRateLimit } from 'claude-code'
+import type { EngineInterface, PromptSubmitInput, SessionRateLimit, UsageUnit } from 'claude-code'
 
-import { DEFAULT_CONFIG, validatePins } from './lib/config'
+import { validatePins } from './lib/config'
 import type { Config } from './lib/config'
 import { paneTitle, statusLine } from './lib/format'
 import { computeBudget, readingFrom } from './lib/plan'
-import type { Budget } from './lib/plan'
+import type { Budget, Reading } from './lib/plan'
 import {
   loadConfig,
   loadLedger,
@@ -16,17 +16,18 @@ import {
   saveLedger,
   saveSharedReading,
   saveSnooze,
+  STALE_MS,
 } from './lib/store'
 import { fixedOffsetTz, systemTz } from './lib/tz'
 import type { Tz } from './lib/tz'
 import { gatePrompt, isGated, measureToast, parseSnooze, toastText } from './lib/warnings'
 import type { Gate, Toast } from './lib/warnings'
 
-// This session's view of the plugin's state, for the panes to draw from. The
-// store is the truth, shared by every session; `refresh` copies it here.
+// This session's own state. The store is the truth shared by every session, and
+// the panes draw from it; what is kept here is only this session's: the reading it
+// measured itself (never one another session shared), and the settings pane's and
+// the compact pane's own state.
 export const readingAtom = atom({ plugin: 'weekly-budget', key: 'reading' } as const, null)
-export const configAtom = atom({ plugin: 'weekly-budget', key: 'config' } as const, DEFAULT_CONFIG)
-export const snoozedUntilAtom = atom({ plugin: 'weekly-budget', key: 'snoozedUntil' } as const, null)
 export const settingsErrorAtom = atom({ plugin: 'weekly-budget', key: 'settingsError' } as const, null)
 export const pinDraftDaysAtom = atom({ plugin: 'weekly-budget', key: 'pinDraftDays' } as const, 'weekend')
 export const compactOpenedAtom = atom({ plugin: 'weekly-budget', key: 'compactOpened' } as const, false)
@@ -64,8 +65,8 @@ async function loadView($: EngineInterface) {
   return { now, tz, cfg, snoozedUntil, reading, staleSince, budget }
 }
 
-// Where the budget stands, on the later of this session's reading and the one
-// any session shared: a new chat has no reading of its own yet. With the zone and
+// Where the budget stands, on the better of this session's own reading and the one
+// any session shared (pickReading): a new chat has no reading of its own yet. With the zone and
 // the time it was worked out for, which say when a last-known reading is from.
 export async function currentBudget($: EngineInterface): Promise<{
   budget: Budget | null
@@ -79,17 +80,10 @@ export async function currentBudget($: EngineInterface): Promise<{
   return { budget, staleSince, cfg, snoozedUntil, tz, now }
 }
 
-// Atoms are written only on a change, because each write redraws whatever reads it.
-const differs = (a: unknown, b: unknown): boolean => JSON.stringify(a) !== JSON.stringify(b)
-
-// Brings this session's atoms, the status line and the drawn panes up to the store.
+// Brings the status line and the drawn panes up to the store.
 export async function refresh($: EngineInterface): Promise<void> {
   const view = await loadView($)
-  const { now, tz, cfg, snoozedUntil, reading, staleSince, budget } = view
-  if (differs(await read($, readingAtom), reading)) await update($, readingAtom, () => reading)
-  if (differs(await read($, configAtom), cfg)) await update($, configAtom, () => cfg)
-  if (differs(await read($, snoozedUntilAtom), snoozedUntil)) await update($, snoozedUntilAtom, () => snoozedUntil)
-
+  const { now, tz, cfg, staleSince, budget } = view
   // The status line is the terminal's; the other surfaces have no such place.
   const hasTerminal = (await $.session.surfaces()).includes('terminal')
   await $.ui.status(hasTerminal ? statusLine(budget, cfg.statusStyle, staleSince, tz, now) : undefined)
@@ -132,12 +126,14 @@ export async function refreshQuietly($: EngineInterface): Promise<void> {
 }
 
 // A snooze set from a pane (null ends it): kept in the store for every session,
-// then in this session's atom, then shown by the status line and the other panes.
+// then shown by the status line and the other panes.
 export async function applySnooze($: EngineInterface, until: number | null): Promise<void> {
   await saveSnooze($, until)
-  await update($, snoozedUntilAtom, () => until)
   await refreshQuietly($)
 }
+
+// Atoms are written only on a change, because each write redraws whatever reads it.
+const differs = (a: unknown, b: unknown): boolean => JSON.stringify(a) !== JSON.stringify(b)
 
 // The settings pane's own state, read and written here with the atoms: the days the
 // next pin is for, and what is wrong with the last change (null when nothing is).
@@ -157,9 +153,9 @@ export async function setSettingsError($: EngineInterface, message: string | nul
   if (differs(await read($, settingsErrorAtom), message)) await update($, settingsErrorAtom, () => message)
 }
 
-// A config set from the settings pane: kept in the store for every session, then in
-// this session's atom, then shown by the status line and the panes. A config that
-// fails its checks changes nothing but the error the pane shows, which is returned.
+// A config set from the settings pane: kept in the store for every session, then
+// shown by the status line and the panes. A config that fails its checks changes
+// nothing but the error the pane shows, which is returned.
 export async function applyConfig($: EngineInterface, next: Config): Promise<string | null> {
   const error = validatePins(next.pins)
   if (error !== null) {
@@ -169,7 +165,6 @@ export async function applyConfig($: EngineInterface, next: Config): Promise<str
 
   await saveConfig($, next)
   await setSettingsError($, null)
-  await update($, configAtom, () => next)
   await refreshQuietly($)
   return null
 }
@@ -185,26 +180,51 @@ export async function applyCompactPanel($: EngineInterface, isOn: boolean): Prom
   await ensureCompact($)
 }
 
-// A new reading: keep it, share it, toast if it calls for one, and redraw.
-export async function onMeasure($: EngineInterface, rateLimits: readonly SessionRateLimit[]): Promise<void> {
-  const now = await $.clock.now()
-  const fresh = readingFrom(rateLimits, now)
-  if (fresh !== null) {
-    await update($, readingAtom, () => fresh)
-    await saveSharedReading($, fresh)
+// The reading a measure brings. Its rate limits are the last response's: a measure
+// raised because only the context moved (no response came, so neither the limits
+// nor the cost did) may carry figures from long ago. When they are those of this
+// session's own last reading, that reading is kept with its time, not re-dated.
+function measuredReading(own: Reading | null, measured: Reading, changed: readonly UsageUnit[]): Reading {
+  const isRepeat =
+    own !== null &&
+    !changed.includes('rateLimits') &&
+    !changed.includes('cost') &&
+    own.percentUsed === measured.percentUsed &&
+    own.resetsMs === measured.resetsMs
+  return isRepeat ? own : measured
+}
 
-    const [cfg, ledger, snoozedUntil, tz] = await Promise.all([
-      loadConfig($),
-      loadLedger($),
-      loadSnooze($),
-      resolveTz($),
-    ])
-    const budget = computeBudget(fresh, cfg, now, tz)
-    const decided = measureToast(budget, cfg, ledger, snoozedUntil, now, tz)
-    // The same ledger back means nothing changed; otherwise keep it, even with no
-    // toast, because a new week resets it.
-    if (decided.ledger !== ledger) await saveLedger($, decided.ledger)
-    if (decided.toast !== null) await $.ui.toast(toastText(decided.toast, budget))
+// A measure: keep a new reading, share it, toast if a fresh one calls for it, and redraw.
+export async function onMeasure(
+  $: EngineInterface,
+  rateLimits: readonly SessionRateLimit[],
+  changed: readonly UsageUnit[],
+): Promise<void> {
+  const now = await $.clock.now()
+  const measured = readingFrom(rateLimits, now)
+  if (measured !== null) {
+    const own = await read($, readingAtom)
+    const reading = measuredReading(own, measured, changed)
+    if (reading !== own) {
+      await update($, readingAtom, () => reading)
+      await saveSharedReading($, reading, now)
+    }
+
+    // The heads-up and the over toast go by a fresh reading only.
+    if (now - reading.at <= STALE_MS) {
+      const [cfg, ledger, snoozedUntil, tz] = await Promise.all([
+        loadConfig($),
+        loadLedger($),
+        loadSnooze($),
+        resolveTz($),
+      ])
+      const budget = computeBudget(reading, cfg, now, tz)
+      const decided = measureToast(budget, cfg, ledger, snoozedUntil, now, tz)
+      // The same ledger back means nothing changed; otherwise keep it, even with no
+      // toast, because a new week resets it.
+      if (decided.ledger !== ledger) await saveLedger($, decided.ledger)
+      if (decided.toast !== null) await $.ui.toast(toastText(decided.toast, budget))
+    }
   }
   await refresh($)
 }

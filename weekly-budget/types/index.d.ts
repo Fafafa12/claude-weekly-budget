@@ -21,9 +21,7 @@ export type Reading = { percentUsed: number; resetsMs: number; at: number }
 declare module 'claude-code' {
   interface PluginState {
     'weekly-budget': {
-      reading: Reading | null
-      config: Config
-      snoozedUntil: number | null
+      reading: Reading | null // this session's own measured reading; the store holds the shared one
       settingsError: string | null
       pinDraftDays: string
       compactOpened: boolean // this session has opened the compact pane, so it never reopens one the person closed

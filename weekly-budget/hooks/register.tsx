@@ -32,7 +32,7 @@ export const register: Register = on => {
   })
 
   on('session.measure', async ($, e, next) => {
-    await onMeasure($, e.rateLimits)
+    await onMeasure($, e.rateLimits, e.changed)
 
     return next(e)
   })

@@ -83,15 +83,55 @@ test('a malformed shared reading is null', async () => {
   expect(await loadSharedReading($)).toBeNull()
 })
 
-test('saveSharedReading keeps the newer', async () => {
+// Usage only goes up within a window, so the better bound is the higher figure,
+// and between equal ones the later reading. A later window beats an earlier one.
+test('saveSharedReading keeps the higher figure in a window, then the later', async () => {
   const $ = fakeEngine()
-  await saveSharedReading($, { percentUsed: 10, resetsMs: reset, at: 2 })
-  await saveSharedReading($, { percentUsed: 9, resetsMs: reset, at: 1 })
-  expect((await loadSharedReading($))?.at).toBe(2)
+  const first = { percentUsed: 10, resetsMs: reset, at: now - 3 * MIN_MS }
+  await saveSharedReading($, first, now)
+  await saveSharedReading($, { percentUsed: 9, resetsMs: reset, at: now - MIN_MS }, now)
+  expect(await loadSharedReading($)).toEqual(first)
 
-  // A different window always wins, even with an older timestamp.
-  await saveSharedReading($, { percentUsed: 1, resetsMs: reset + 7 * DAY_MS, at: 1 })
-  expect(await loadSharedReading($)).toEqual({ percentUsed: 1, resetsMs: reset + 7 * DAY_MS, at: 1 })
+  const same = { ...first, at: now - 2 * MIN_MS }
+  await saveSharedReading($, same, now)
+  expect(await loadSharedReading($)).toEqual(same)
+  await saveSharedReading($, first, now)
+  expect(await loadSharedReading($)).toEqual(same)
+
+  const higher = { percentUsed: 12, resetsMs: reset, at: now - 5 * MIN_MS }
+  await saveSharedReading($, higher, now)
+  expect(await loadSharedReading($)).toEqual(higher)
+})
+
+test('saveSharedReading keeps the later window, whatever its figure or time', async () => {
+  const $ = fakeEngine()
+  const next = { percentUsed: 1, resetsMs: reset + 7 * DAY_MS, at: now - 5 * MIN_MS }
+  await saveSharedReading($, { percentUsed: 90, resetsMs: reset, at: now - MIN_MS }, now)
+  await saveSharedReading($, next, now)
+  expect(await loadSharedReading($)).toEqual(next)
+
+  // An earlier window never comes back over it.
+  await saveSharedReading($, { percentUsed: 95, resetsMs: reset, at: now }, now)
+  expect(await loadSharedReading($)).toEqual(next)
+})
+
+test('saveSharedReading never stores a reading whose window is over', async () => {
+  const $ = fakeEngine()
+  // The reset instant itself is already the next window.
+  await saveSharedReading($, { percentUsed: 30, resetsMs: now, at: now - MIN_MS }, now)
+  expect(await loadSharedReading($)).toBeNull()
+
+  const live = { percentUsed: 30, resetsMs: reset, at: now - MIN_MS }
+  await saveSharedReading($, live, now)
+  await saveSharedReading($, { percentUsed: 90, resetsMs: now - 1, at: now }, now)
+  expect(await loadSharedReading($)).toEqual(live)
+})
+
+test('saveSharedReading replaces a stored reading whose window is over', async () => {
+  const $ = fakeEngine({ lastReading: { percentUsed: 99, resetsMs: now - DAY_MS, at: now - 2 * DAY_MS } })
+  const live = { percentUsed: 3, resetsMs: reset, at: now }
+  await saveSharedReading($, live, now)
+  expect(await loadSharedReading($)).toEqual(live)
 })
 
 test('pickReading drops a session reading from an expired window', () => {
@@ -111,10 +151,17 @@ test('pickReading is not stale at exactly STALE_MS', () => {
   expect(pickReading(null, shared, now)).toEqual({ reading: shared, staleSince: null })
 })
 
-test('pickReading takes the later reading in the same window', () => {
+test('pickReading takes the higher figure in the same window, even when it is older', () => {
   const t = now - 60e3
-  const session = { percentUsed: 30, resetsMs: reset, at: t }
-  const shared = { percentUsed: 31, resetsMs: reset, at: t + 1 }
+  const session = { percentUsed: 30, resetsMs: reset, at: t + 1 }
+  const shared = { percentUsed: 31, resetsMs: reset, at: t }
+  expect(pickReading(session, shared, now)).toEqual({ reading: shared, staleSince: null })
+  expect(pickReading(shared, session, now).reading).toEqual(shared)
+})
+
+test('pickReading takes the later of two equal figures in the same window', () => {
+  const session = { percentUsed: 30, resetsMs: reset, at: now - 20 * MIN_MS }
+  const shared = { percentUsed: 30, resetsMs: reset, at: now - MIN_MS }
   expect(pickReading(session, shared, now)).toEqual({ reading: shared, staleSince: null })
   expect(pickReading(shared, session, now).reading).toEqual(shared)
 })
