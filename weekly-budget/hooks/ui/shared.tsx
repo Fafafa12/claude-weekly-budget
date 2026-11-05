@@ -1,13 +1,23 @@
 import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 
 import { resolveTz } from '../controller'
-import { paneTitle, textBar } from '../lib/format'
+import { DAY_NAMES, dayShares } from '../lib/config'
+import type { Config, Weekday } from '../lib/config'
+import { paneTitle, pct, textBar } from '../lib/format'
 import type { Budget } from '../lib/plan'
 import { barSvg } from '../lib/svg'
 
 const BAR_HEIGHT = 34
 
 export const NO_READING_TEXT = 'No weekly reading yet — send a message.'
+
+const MON_TO_SUN: readonly Weekday[] = [1, 2, 3, 4, 5, 6, 0]
+
+// "Plan: Mon 18 · Tue 18 · … · Sun 5": each weekday's share of the week, in week order.
+export function planLine(cfg: Config): string {
+  const shares = dayShares(cfg.pins)
+  return `Plan: ${MON_TO_SUN.map(day => `${DAY_NAMES[day]} ${pct(shares[day] ?? 0)}`).join(' · ')}`
+}
 
 // The budget bar both panes draw: the share-sized Svg where the surface has one, the
 // text bar where it has not.

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PromptSubmitInput, SessionRateLimit } from 'claude-code'
 
-import { DEFAULT_CONFIG } from './lib/config'
+import { DEFAULT_CONFIG, validatePins } from './lib/config'
 import type { Config } from './lib/config'
 import { paneTitle, statusLine } from './lib/format'
 import { computeBudget, readingFrom } from './lib/plan'
@@ -12,6 +12,7 @@ import {
   loadSharedReading,
   loadSnooze,
   pickReading,
+  saveConfig,
   saveLedger,
   saveSharedReading,
   saveSnooze,
@@ -121,6 +122,52 @@ export async function applySnooze($: EngineInterface, until: number | null): Pro
   await saveSnooze($, until)
   await update($, snoozedUntilAtom, () => until)
   await refreshQuietly($)
+}
+
+// The settings pane's own state, read and written here with the atoms: the days the
+// next pin is for, and what is wrong with the last change (null when nothing is).
+export async function getPinDraftDays($: EngineInterface): Promise<string> {
+  return read($, pinDraftDaysAtom)
+}
+
+export async function getSettingsError($: EngineInterface): Promise<string | null> {
+  return read($, settingsErrorAtom)
+}
+
+export async function setPinDraftDays($: EngineInterface, days: string): Promise<void> {
+  if (differs(await read($, pinDraftDaysAtom), days)) await update($, pinDraftDaysAtom, () => days)
+}
+
+export async function setSettingsError($: EngineInterface, message: string | null): Promise<void> {
+  if (differs(await read($, settingsErrorAtom), message)) await update($, settingsErrorAtom, () => message)
+}
+
+// A config set from the settings pane: kept in the store for every session, then in
+// this session's atom, then shown by the status line and the panes. A config that
+// fails its checks changes nothing but the error the pane shows, which is returned.
+export async function applyConfig($: EngineInterface, next: Config): Promise<string | null> {
+  const error = validatePins(next.pins)
+  if (error !== null) {
+    await setSettingsError($, error)
+    return error
+  }
+
+  await saveConfig($, next)
+  await setSettingsError($, null)
+  await update($, configAtom, () => next)
+  await refreshQuietly($)
+  return null
+}
+
+// The compact pane's switch: off closes the pane, on opens it again even if it was
+// closed earlier this session, which is why that is forgotten first.
+export async function applyCompactPanel($: EngineInterface, isOn: boolean): Promise<void> {
+  // Closed before the refresh, so that it finds no pane left to close.
+  if (!isOn) await $.ui.close({ id: COMPACT })
+  const error = await applyConfig($, { ...(await loadConfig($)), showCompactPanel: isOn })
+  if (!isOn || error !== null) return
+  await update($, compactOpenedAtom, () => false)
+  await ensureCompact($)
 }
 
 // A new reading: keep it, share it, toast if it calls for one, and redraw.

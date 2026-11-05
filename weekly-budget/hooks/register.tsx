@@ -3,6 +3,7 @@ import type { Register } from 'claude-code'
 import { ensureCompact, onMeasure, onPrompt, refreshQuietly, runBudgetCommand, showToast } from './controller'
 import { renderCompact } from './ui/compact'
 import { renderDetails } from './ui/details'
+import { renderSettings } from './ui/settings'
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -49,7 +50,15 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane', requestId: 'details' }, async ($, e) => renderDetails($, e))
 
+  on('ui.render', { component: 'Pane', requestId: 'settings' }, async ($, e) => renderSettings($, e))
+
   on('command.run', { command: 'budget' }, async ($, e) => ({
     text: await runBudgetCommand($, e.args),
   }))
+
+  on('command.run', { command: 'budget-config' }, async $ => {
+    await $.ui.open({ id: 'settings', title: 'Weekly budget settings' })
+
+    return { text: 'Budget settings opened.' }
+  })
 }

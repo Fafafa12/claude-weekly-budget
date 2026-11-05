@@ -1,24 +1,17 @@
 import type { EngineInterface, RenderElement, RenderInput, ThemeKey } from 'claude-code'
 
 import { applySnooze, currentBudget, resolveTz } from '../controller'
-import { DAY_NAMES, dayShares } from '../lib/config'
-import type { Config, Weekday } from '../lib/config'
+import { DAY_NAMES } from '../lib/config'
+import type { Config } from '../lib/config'
 import { countdown, pct, todayText } from '../lib/format'
 import type { BudgetState } from '../lib/plan'
-import { NO_READING_TEXT, renderBar } from './shared'
+import { NO_READING_TEXT, planLine, renderBar } from './shared'
 
 const MIN_MS = 60_000
 
-const MON_TO_SUN: readonly Weekday[] = [1, 2, 3, 4, 5, 6, 0]
 // Theme keys, so that the state follows Claude's theme on each surface.
 const STATE_COLORS: Record<BudgetState, ThemeKey> = { ok: 'success', near: 'warning', over: 'error', limit: 'error' }
 const MODE_NAMES: Record<Config['mode'], string> = { warn: 'warn', rewarn: 're-warn', block: 'block' }
-
-// "Mon 18 · Tue 18 · … · Sun 5": each weekday's share of the week, in week order.
-function planSummary(cfg: Config): string {
-  const shares = dayShares(cfg.pins)
-  return MON_TO_SUN.map(day => `${DAY_NAMES[day]} ${pct(shares[day] ?? 0)}`).join(' · ')
-}
 
 // 15 -> "Snooze 15m", 60 -> "Snooze 1h", 90 -> "Snooze 1h 30m".
 function snoozeLabel(minutes: number): string {
@@ -66,7 +59,7 @@ export async function renderDetails($: EngineInterface, e: RenderInput<'Pane'>):
     <Box flexDirection="column" gap={1}>
       {reading}
       <Box flexDirection="column">
-        <Text>{`Plan: ${planSummary(cfg)}`}</Text>
+        <Text>{planLine(cfg)}</Text>
         <Text>{`Mode: ${MODE_NAMES[cfg.mode]}`}</Text>
       </Box>
       <Box flexDirection="column">
