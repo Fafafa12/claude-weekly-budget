@@ -203,7 +203,9 @@ function measuredReading(own: Reading | null, measured: Reading, changed: readon
   return isRepeat ? own : measured
 }
 
-// A measure: keep a new reading, share it, toast if a fresh one calls for it, and redraw.
+// A measure: keep a new reading, share it, toast if a fresh one calls for it, and
+// redraw. One from a window that is over is no reading: it says nothing of the week
+// now running, so it is not kept, shared, toasted on or let reset the ledger.
 export async function onMeasure(
   $: EngineInterface,
   rateLimits: readonly SessionRateLimit[],
@@ -211,7 +213,7 @@ export async function onMeasure(
 ): Promise<void> {
   const now = await $.clock.now()
   const measured = readingFrom(rateLimits, now)
-  if (measured !== null) {
+  if (measured !== null && measured.resetsMs > now) {
     const own = await read($, readingAtom)
     const reading = measuredReading(own, measured, changed)
     if (reading !== own) {

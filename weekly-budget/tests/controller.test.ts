@@ -618,6 +618,21 @@ test('a measure from a window that is over keeps the shared reading', { plugins:
   expect(await stored($, 'lastReading')).toEqual(reading(33))
 })
 
+// A window that is over says nothing about the week now running: such a measure is
+// no reading at all. At 99% of a window that ended an hour ago, the old window's
+// last day would read as a heads-up, and its week would reset the ledger.
+test('a measure from a window that is over is ignored', { plugins: [probe] }, async ($, on) => {
+  const ledger = { weekKey: reset, headsUpDay: null, overDay: '2026-11-05' }
+  const { calls } = engine(on, { store: { config: pinned, ledger, lastReading: reading(33) } })
+
+  await measure($, 99, now - HOUR_MS)
+
+  expect(calls.toasts).toEqual([])
+  expect(await stored($, 'ledger')).toEqual(ledger)
+  expect(await stored($, 'lastReading')).toEqual(reading(33))
+  expect(calls.statuses.at(-1)).toContain('33% → 39%')
+})
+
 test('a lower reading in the same window does not replace a higher one', { plugins: [probe] }, async ($, on) => {
   const higher = reading(40, now - 5 * 60e3)
   engine(on, { store: { config: pinned, lastReading: higher } })
