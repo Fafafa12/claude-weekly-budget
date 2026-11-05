@@ -99,12 +99,19 @@ test('statusLine without a reading', async () => {
   expect(statusLine(null, 'B', null, tz, now)).toBe('Weekly budget: no reading yet — send a message')
 })
 
+// A stale reading carries its time, and its weekday when it is from an earlier local day.
 test('statusLine marks a stale reading with the time of it', async () => {
-  const staleSince = Date.parse('2026-11-05T07:44:00Z')
+  const staleSince = Date.parse('2026-11-05T07:44:00Z') // Thu 10:44 local, today
   expect(statusLine(at(33), 'A', staleSince, tz, now).endsWith(' · as of 10:44')).toBe(true)
   expect(statusLine(at(100), 'C', staleSince, tz, now)).toBe(
     '🔴 Weekly limit reached · resets in 5d 5h · as of 10:44',
   )
+  const yesterday = Date.parse('2026-11-04T07:44:00Z') // Wed 10:44 local
+  expect(statusLine(at(33), 'A', yesterday, tz, now)).toBe(
+    '🟢 Week 33% / 39% allowed · today 6% left · as of Wed 10:44',
+  )
+  // Local midnight, not UTC's, divides the days: 22:30Z on Wed is already Thu 01:30.
+  expect(statusLine(at(33), 'C', Date.parse('2026-11-04T22:30:00Z'), tz, now)).toBe('🟢 6% left today · as of 01:30')
 })
 
 test('used equal to allowed through float noise reads as left, not over', async () => {
@@ -125,8 +132,13 @@ test('the state, not the sign of left, decides left or over', async () => {
 })
 
 test('paneTitle', async () => {
-  expect(paneTitle(at(33))).toBe('🟢 33% of 39% · 6% left today')
-  expect(paneTitle(at(43))).toBe('🔴 43% of 39% · 4% over today')
-  expect(paneTitle(at(100))).toBe('🔴 100% of 39% · weekly limit reached')
-  expect(paneTitle(null)).toBe('Weekly budget · no reading yet')
+  expect(paneTitle(at(33), null, tz, now)).toBe('🟢 33% of 39% · 6% left today')
+  expect(paneTitle(at(43), null, tz, now)).toBe('🔴 43% of 39% · 4% over today')
+  expect(paneTitle(at(100), null, tz, now)).toBe('🔴 100% of 39% · weekly limit reached')
+  expect(paneTitle(null, null, tz, now)).toBe('Weekly budget · no reading yet')
+})
+
+test('paneTitle marks a stale reading as statusLine does', async () => {
+  expect(paneTitle(at(33), now - HOUR_MS, tz, now)).toBe('🟢 33% of 39% · 6% left today · as of 14:00')
+  expect(paneTitle(at(43), now - 24 * HOUR_MS, tz, now)).toBe('🔴 43% of 39% · 4% over today · as of Wed 15:00')
 })

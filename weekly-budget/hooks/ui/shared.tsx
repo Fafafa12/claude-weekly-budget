@@ -1,11 +1,11 @@
 import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 
-import { resolveTz } from '../controller'
 import { DAY_NAMES, dayShares } from '../lib/config'
 import type { Config, Weekday } from '../lib/config'
 import { paneTitle, pct, textBar } from '../lib/format'
 import type { Budget } from '../lib/plan'
 import { barSvg } from '../lib/svg'
+import type { Tz } from '../lib/tz'
 
 const BAR_HEIGHT = 34
 
@@ -20,8 +20,13 @@ export function planLine(cfg: Config): string {
 }
 
 // The budget bar both panes draw: the share-sized Svg where the surface has one, the
-// text bar where it has not.
-export async function renderBar($: EngineInterface, e: RenderInput<'Pane'>, budget: Budget): Promise<RenderElement> {
+// text bar where it has not. The Svg's alt is the compact pane's title, "as of" mark included.
+export function renderBar(
+  $: EngineInterface,
+  e: RenderInput<'Pane'>,
+  budget: Budget,
+  { staleSince, tz, now }: { staleSince: number | null; tz: Tz; now: number },
+): RenderElement {
   const els = $.ui.resolve(e)
 
   // The terminal's table names `Svg` too (the kit's does), yet refuses a tree that draws one.
@@ -33,6 +38,6 @@ export async function renderBar($: EngineInterface, e: RenderInput<'Pane'>, budg
   // The bar is as wide as the body (about 8px a column, less the frame), within what reads well.
   const width = Math.min(560, Math.max(200, e.props.bodyColumns * 8 - 24))
   const { Svg } = els
-  const source = barSvg(budget, width, await resolveTz($))
-  return <Svg source={source} alt={paneTitle(budget)} width={width} height={BAR_HEIGHT} />
+  const source = barSvg(budget, width, tz)
+  return <Svg source={source} alt={paneTitle(budget, staleSince, tz, now)} width={width} height={BAR_HEIGHT} />
 }

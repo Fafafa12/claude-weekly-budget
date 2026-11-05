@@ -32,7 +32,12 @@ export const pinDraftDaysAtom = atom({ plugin: 'weekly-budget', key: 'pinDraftDa
 export const compactOpenedAtom = atom({ plugin: 'weekly-budget', key: 'compactOpened' } as const, false)
 
 const COMPACT = 'compact'
-const compactPane = (budget: Budget | null) => ({ id: COMPACT, title: paneTitle(budget), rows: 2 })
+// Titled with the summary, marked "as of" when the reading is last known.
+const compactPane = (v: { budget: Budget | null; staleSince: number | null; tz: Tz; now: number }) => ({
+  id: COMPACT,
+  title: paneTitle(v.budget, v.staleSince, v.tz, v.now),
+  rows: 2,
+})
 
 const USAGE = 'Usage: /budget, /budget snooze 30m|1h|today|off'
 
@@ -60,12 +65,18 @@ async function loadView($: EngineInterface) {
 }
 
 // Where the budget stands, on the later of this session's reading and the one
-// any session shared: a new chat has no reading of its own yet.
-export async function currentBudget(
-  $: EngineInterface,
-): Promise<{ budget: Budget | null; staleSince: number | null; cfg: Config; snoozedUntil: number | null }> {
-  const { budget, staleSince, cfg, snoozedUntil } = await loadView($)
-  return { budget, staleSince, cfg, snoozedUntil }
+// any session shared: a new chat has no reading of its own yet. With the zone and
+// the time it was worked out for, which say when a last-known reading is from.
+export async function currentBudget($: EngineInterface): Promise<{
+  budget: Budget | null
+  staleSince: number | null
+  cfg: Config
+  snoozedUntil: number | null
+  tz: Tz
+  now: number
+}> {
+  const { budget, staleSince, cfg, snoozedUntil, tz, now } = await loadView($)
+  return { budget, staleSince, cfg, snoozedUntil, tz, now }
 }
 
 // Atoms are written only on a change, because each write redraws whatever reads it.
@@ -73,7 +84,8 @@ const differs = (a: unknown, b: unknown): boolean => JSON.stringify(a) !== JSON.
 
 // Brings this session's atoms, the status line and the drawn panes up to the store.
 export async function refresh($: EngineInterface): Promise<void> {
-  const { now, tz, cfg, snoozedUntil, reading, staleSince, budget } = await loadView($)
+  const view = await loadView($)
+  const { now, tz, cfg, snoozedUntil, reading, staleSince, budget } = view
   if (differs(await read($, readingAtom), reading)) await update($, readingAtom, () => reading)
   if (differs(await read($, configAtom), cfg)) await update($, configAtom, () => cfg)
   if (differs(await read($, snoozedUntilAtom), snoozedUntil)) await update($, snoozedUntilAtom, () => snoozedUntil)
@@ -81,7 +93,7 @@ export async function refresh($: EngineInterface): Promise<void> {
   // The status line is the terminal's; the other surfaces have no such place.
   const hasTerminal = (await $.session.surfaces()).includes('terminal')
   await $.ui.status(hasTerminal ? statusLine(budget, cfg.statusStyle, staleSince, tz, now) : undefined)
-  await syncCompact($, cfg, budget)
+  await syncCompact($, view)
   $.ui.invalidate('ui.render')
 }
 
@@ -89,11 +101,14 @@ export async function refresh($: EngineInterface): Promise<void> {
 // draws that, so a changed title is a new open (which retitles). The panes the
 // engine lists are the ones still up: one the person closed is not there, and
 // stays closed. One the config now switches off is closed.
-async function syncCompact($: EngineInterface, cfg: Config, budget: Budget | null): Promise<void> {
+async function syncCompact(
+  $: EngineInterface,
+  view: { cfg: Config; budget: Budget | null; staleSince: number | null; tz: Tz; now: number },
+): Promise<void> {
   const pane = (await $.ui.panes()).find(p => p.id === COMPACT)
   if (pane === undefined) return
-  const wanted = compactPane(budget)
-  if (!cfg.showCompactPanel) await $.ui.close({ id: COMPACT })
+  const wanted = compactPane(view)
+  if (!view.cfg.showCompactPanel) await $.ui.close({ id: COMPACT })
   else if (pane.title !== wanted.title) await $.ui.open(wanted)
 }
 
@@ -103,9 +118,9 @@ async function syncCompact($: EngineInterface, cfg: Config, budget: Budget | nul
 export async function ensureCompact($: EngineInterface): Promise<void> {
   if (await read($, compactOpenedAtom)) return
   if (!(await $.session.surfaces()).some(s => s !== 'terminal')) return
-  const { budget, cfg } = await currentBudget($)
-  if (!cfg.showCompactPanel) return
-  await $.ui.open(compactPane(budget))
+  const view = await loadView($)
+  if (!view.cfg.showCompactPanel) return
+  await $.ui.open(compactPane(view))
   await update($, compactOpenedAtom, () => true)
 }
 

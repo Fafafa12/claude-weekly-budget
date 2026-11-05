@@ -13,7 +13,7 @@ const reset = Date.parse('2026-11-10T17:00:00Z') // Tue 20:00 local
 // Thu 15:00 with a weekend pin of 10%: the plan allows 39% by tonight and 18% of
 // it is today's, so 33% is ok (6% left) and 43% is over (4% over).
 const pinned: Config = { ...DEFAULT_CONFIG, pins: [{ days: [6, 0], percent: 10 }] }
-const reading = (percentUsed: number) => ({ percentUsed, resetsMs: reset, at: now })
+const reading = (percentUsed: number, at = now) => ({ percentUsed, resetsMs: reset, at })
 
 // The kit's `mock.store` answers the `$.store` calls the plugin's own hooks make,
 // and refuses them from a hook the test registers. So the tests read what got
@@ -154,6 +154,39 @@ for (const surface of SURFACES) {
     await ui.unmount()
   })
 }
+
+for (const surface of SURFACES) {
+  test(`a stale reading is marked last known on ${surface}`, async ($, on) => {
+    engine(on, { store: { config: pinned, lastReading: reading(33, now - HOUR_MS) } })
+
+    const ui = await $.ui.mount({ ...PANE, surface })
+
+    const mark = await ui.find({ type: 'Text', text: /Last known/ })
+    expect(mark?.text).toBe('Last known, as of 14:00')
+    expect(mark?.props.dimColor).toBe(true)
+    expect((await ui.find({ type: 'Text', text: /Used/ }))?.text).toBe('Used 33%')
+    await ui.unmount()
+  })
+
+  test(`a fresh reading has no last-known mark on ${surface}`, async ($, on) => {
+    engine(on)
+
+    const ui = await $.ui.mount({ ...PANE, surface })
+
+    expect(await ui.find({ type: 'Text', text: /Last known|as of/ })).toBeUndefined()
+    await ui.unmount()
+  })
+}
+
+test('a reading from yesterday is last known with its weekday', async ($, on) => {
+  engine(on, { store: { config: pinned, lastReading: reading(33, now - 24 * HOUR_MS) } })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+
+  expect((await ui.find({ type: 'Text', text: /Last known/ }))?.text).toBe('Last known, as of Wed 15:00')
+  expect((await ui.find({ type: 'Svg' }))?.props.alt).toEndWith(' · as of Wed 15:00')
+  await ui.unmount()
+})
 
 test('terminal has no Svg', async ($, on) => {
   engine(on)

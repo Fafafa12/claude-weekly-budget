@@ -17,9 +17,10 @@ const pinned: Config = { ...DEFAULT_CONFIG, pins: [{ days: [6, 0], percent: 10 }
 const tz = fixedOffsetTz(180)
 const budgetAt = (used: number) =>
   computeBudget({ percentUsed: used, resetsMs: reset, at: now }, pinned, now, tz)
-const titleAt = (used: number) => paneTitle(budgetAt(used))
+const titleAt = (used: number) => paneTitle(budgetAt(used), null, tz, now)
 
-const reading = (percentUsed: number) => ({ percentUsed, resetsMs: reset, at: now })
+const HOUR_MS = 3600e3
+const reading = (percentUsed: number, at = now) => ({ percentUsed, resetsMs: reset, at })
 const sevenDay = (used: number) => [
   { kind: 'seven_day', percentUsed: used, resetsAt: new Date(reset).toISOString() },
 ]
@@ -164,6 +165,42 @@ test('opens only off-terminal', async ($, on) => {
   await start($, vscode.clock)
 
   expect(vscode.calls.opens).toEqual([{ id: 'compact', title: '🟢 33% of 39% · 6% left today', rows: 2 }])
+})
+
+// A reading another session shared an hour ago is last known, not live: the title
+// and the bar's alt say when it is from, with the weekday once it is from an earlier day.
+test('the title and the bar mark a reading an hour old', async ($, on) => {
+  const { calls, clock } = engine(on, {
+    store: { config: pinned, lastReading: reading(33, now - HOUR_MS) },
+    surfaces: ['vscode'],
+  })
+
+  await start($, clock)
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+
+  expect(calls.opens.map(open => open.title)).toEqual(['🟢 33% of 39% · 6% left today · as of 14:00'])
+  expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('🟢 33% of 39% · 6% left today · as of 14:00')
+  await ui.unmount()
+})
+
+test('a reading from yesterday is marked with its weekday', async ($, on) => {
+  const { calls, clock } = engine(on, {
+    store: { config: pinned, lastReading: reading(33, now - 24 * HOUR_MS) },
+    surfaces: ['vscode'],
+  })
+
+  await start($, clock)
+
+  expect(calls.opens.at(-1)?.title).toEndWith(' · as of Wed 15:00')
+})
+
+test('an open pane is retitled once its reading goes stale', async ($, on) => {
+  const { calls, clock } = engine(on, { store: { config: pinned, lastReading: reading(33) }, surfaces: ['vscode'] })
+
+  await start($, clock)
+  await clock.advance(16 * 60e3)
+
+  expect(calls.opens.map(open => open.title)).toEqual([titleAt(33), `${titleAt(33)} · as of 15:00`])
 })
 
 test('stays out of the terminal', async ($, on) => {

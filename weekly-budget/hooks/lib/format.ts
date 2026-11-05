@@ -1,3 +1,4 @@
+import { DAY_NAMES } from './config'
 import type { StatusStyle } from './config'
 import { EPS } from './plan'
 import type { Budget, BudgetState } from './plan'
@@ -65,6 +66,19 @@ export function textBar(used: number, allowed: number, cells = 20): string {
   return bar
 }
 
+// When a last-known reading is from: "14:00" when that is today, "Wed 14:00" when
+// it is from an earlier local day.
+export function asOf(staleSince: number, tz: Tz, now: number): string {
+  const time = tz.hhmm(staleSince)
+  return tz.dayKey(staleSince) === tz.dayKey(now) ? time : `${DAY_NAMES[tz.weekday(staleSince)]} ${time}`
+}
+
+// What a line about the budget ends with: " · as of 14:00" for a last-known reading,
+// nothing for a live one.
+function staleMark(staleSince: number | null, tz: Tz, now: number): string {
+  return staleSince === null ? '' : ` · as of ${asOf(staleSince, tz, now)}`
+}
+
 export function statusLine(
   b: Budget | null,
   style: StatusStyle,
@@ -73,7 +87,7 @@ export function statusLine(
   now: number,
 ): string {
   if (b === null) return NO_READING
-  const stale = staleSince === null ? '' : ` · as of ${tz.hhmm(staleSince)}`
+  const stale = staleMark(staleSince, tz, now)
   if (b.state === 'limit') {
     return `🔴 Weekly limit reached · resets in ${countdown(b.resetMs - now)}${stale}`
   }
@@ -89,7 +103,7 @@ export function statusLine(
   }
 }
 
-export function paneTitle(b: Budget | null): string {
+export function paneTitle(b: Budget | null, staleSince: number | null, tz: Tz, now: number): string {
   if (b === null) return 'Weekly budget · no reading yet'
-  return `${stateGlyph(b.state)} ${pct(b.used)}% of ${pct(b.allowed)}% · ${todayText(b)}`
+  return `${stateGlyph(b.state)} ${pct(b.used)}% of ${pct(b.allowed)}% · ${todayText(b)}${staleMark(staleSince, tz, now)}`
 }

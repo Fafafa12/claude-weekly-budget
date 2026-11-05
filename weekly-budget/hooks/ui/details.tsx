@@ -3,7 +3,7 @@ import type { EngineInterface, RenderElement, RenderInput, ThemeKey } from 'clau
 import { applySnooze, currentBudget, resolveTz } from '../controller'
 import { DAY_NAMES } from '../lib/config'
 import type { Config } from '../lib/config'
-import { countdown, pct, todayText } from '../lib/format'
+import { asOf, countdown, pct, todayText } from '../lib/format'
 import type { BudgetState } from '../lib/plan'
 import { NO_READING_TEXT, planLine, renderBar } from './shared'
 
@@ -30,12 +30,13 @@ async function snoozeFor($: EngineInterface, span: Span): Promise<void> {
   await applySnooze($, span === null ? null : span === 'today' ? tz.midnightAfter(now) : now + span * MIN_MS)
 }
 
-// The body of the details pane, which /budget opens: the numbers, when the week
-// resets, the plan, the mode, and the snooze with its buttons. The plan, the mode
+// The body of the details pane, which /budget opens: the numbers (marked last known
+// when the reading is stale), when the week resets, the plan, the mode, and the
+// snooze with its buttons. The plan, the mode
 // and the snooze come from the config and the store, so they show with no reading too.
 export async function renderDetails($: EngineInterface, e: RenderInput<'Pane'>): Promise<RenderElement> {
   const { Box, Button, Text } = $.ui.resolve(e)
-  const [{ budget, cfg, snoozedUntil }, tz, now] = await Promise.all([currentBudget($), resolveTz($), $.clock.now()])
+  const { budget, staleSince, cfg, snoozedUntil, tz, now } = await currentBudget($)
   const isSnoozed = snoozedUntil !== null && snoozedUntil > now
 
   const reading =
@@ -43,8 +44,9 @@ export async function renderDetails($: EngineInterface, e: RenderInput<'Pane'>):
       <Text dimColor>{NO_READING_TEXT}</Text>
     ) : (
       <Box flexDirection="column" gap={1}>
-        {await renderBar($, e, budget)}
+        {renderBar($, e, budget, { staleSince, tz, now })}
         <Box flexDirection="column">
+          {staleSince !== null && <Text dimColor>{`Last known, as of ${asOf(staleSince, tz, now)}`}</Text>}
           <Text>{`Used ${pct(budget.used)}%`}</Text>
           <Text>{`Allowed by tonight ${pct(budget.allowed)}%`}</Text>
           <Text color={STATE_COLORS[budget.state]}>{todayText(budget)}</Text>
