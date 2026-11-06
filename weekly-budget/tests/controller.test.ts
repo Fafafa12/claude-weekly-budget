@@ -45,6 +45,7 @@ type Calls = {
   opens: { id: string; title?: string }[]
   registered: string[]
   probes: { argv: readonly string[]; env?: Readonly<Record<string, string>> }[]
+  fetches: { url: string; auth?: string; headers?: Readonly<Record<string, string>> }[]
 }
 
 // Everything beneath the plugin: the clock, environment and store, and what the
@@ -56,9 +57,12 @@ function engine(
     surfaces?: RenderSurface[]
     env?: Record<string, string>
     usage?: string // what `claude -p /usage` prints; absent, it fails
+    // What Anthropic's account addresses answer the chat's own login; absent, the
+    // session has no first-party login, so neither is asked.
+    oauth?: { profile?: unknown; usage?: unknown }
   } = {},
 ) {
-  const calls: Calls = { surfaceAsks: 0, statuses: [], toasts: [], opens: [], registered: [], probes: [] }
+  const calls: Calls = { surfaceAsks: 0, statuses: [], toasts: [], opens: [], registered: [], probes: [], fetches: [] }
   const clock = mock.clock(on, { now })
   mock.env(on, options.env ?? { WEEKLY_BUDGET_TZ_OFFSET_MIN: '180' })
   if (options.store !== null) mock.store(on, options.store ?? {})
@@ -95,6 +99,13 @@ function engine(
     return {
       value: { exitCode: ok ? 0 : 1, stdout: options.usage ?? '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
     }
+  })
+  on('session.authorize', () => ({ value: options.oauth === undefined ? null : { handle: 'sealed', kind: 'bearer' } }))
+  on('http.fetch', (_, e) => {
+    calls.fetches.push({ url: e.url, auth: e.init?.auth, headers: e.init?.headers })
+    const body = e.url.endsWith('/profile') ? options.oauth?.profile : options.oauth?.usage
+    const ok = body !== undefined
+    return { value: { status: ok ? 200 : 500, ok, headers: {}, text: ok ? JSON.stringify(body) : 'error' } }
   })
   return { calls, clock }
 }
@@ -843,7 +854,7 @@ test('the Claude Code a probe starts does not probe in turn', async ($, on) => {
 
 test('a probe in any chat in the last 10 minutes stands for this one', async ($, on) => {
   const { calls, clock } = engine(on, {
-    store: { ...shown, lastReading: reading(45, halfHourAgo), probeAt: { at: now - 5 * 60e3 } },
+    store: { ...shown, lastReading: reading(45, halfHourAgo), probeAt: { cli: now - 5 * 60e3 } },
     usage: USAGE_48,
   })
 
@@ -854,7 +865,7 @@ test('a probe in any chat in the last 10 minutes stands for this one', async ($,
 
 test('/budget probes when asked, unless one just ran', async ($, on) => {
   const { calls, clock } = engine(on, {
-    store: { ...shown, lastReading: reading(45, halfHourAgo), probeAt: { at: now - 2 * 60e3 } },
+    store: { ...shown, lastReading: reading(45, halfHourAgo), probeAt: { cli: now - 2 * 60e3 } },
     usage: USAGE_48,
   })
   // The start doesn't probe (one ran 2 minutes ago); /budget, asking, does.
@@ -958,7 +969,7 @@ test('with no surface remembered a new chat shows the week read last', async ($,
 
 test("/usage updates the week whose reset it names, not another account's chat", { plugins: [probe] }, async ($, on) => {
   const { calls, clock } = engine(on, {
-    store: { ...shown, weeks: [teamWeek(47), proWeek(3)], probeAt: { at: now - 5 * 60e3 } },
+    store: { ...shown, weeks: [teamWeek(47), proWeek(3)], probeAt: { cli: now - 5 * 60e3 } },
     usage: USAGE_48,
   })
   await start($, clock)
@@ -983,7 +994,7 @@ test('/budget replies with the numbers, marked last known when they are', async 
 
 test('/budget replies with the fresh figure /usage gave', async ($, on) => {
   const { clock } = engine(on, {
-    store: { ...shown, lastReading: reading(45, halfHourAgo), probeAt: { at: now - 5 * 60e3 } },
+    store: { ...shown, lastReading: reading(45, halfHourAgo), probeAt: { cli: now - 5 * 60e3 } },
     usage: USAGE_48,
   })
   await start($, clock)
@@ -1005,4 +1016,88 @@ test('an account seen for the first time starts with the settings last used on t
 
   const configs = (await stored($, 'configs')) as Record<string, { mode: string; pins: unknown }>
   expect(configs[accountSlot(proReset)]).toMatchObject({ mode: 'block', pins: pinned.pins })
+})
+
+// Each chat's own login, through the sealed handle: who it is signed in as, and its
+// account's week, exact to the second.
+const PROFILE = {
+  account: { uuid: 'acc-1', display_name: 'Faneva', email: 'faneva@experts-cpa.com' },
+  organization: { uuid: 'org-1', name: 'Experts-cpa', organization_type: 'claude_team' },
+}
+const usageAnswer = (utilization: number, resetsAt = '2026-11-10T17:00:00.460074+00:00') => ({
+  seven_day: { utilization, resets_at: resetsAt },
+})
+
+test("a chat that starts fetches its own account's week, with no reply and no /usage", { plugins: [probe] }, async ($, on) => {
+  const { calls, clock } = engine(on, { store: shown, oauth: { profile: PROFILE, usage: usageAnswer(54) } })
+
+  await start($, clock)
+
+  expect(calls.fetches.map(f => f.url)).toEqual([
+    'https://api.anthropic.com/api/oauth/profile',
+    'https://api.anthropic.com/api/oauth/usage',
+  ])
+  expect(calls.fetches.every(f => f.auth === 'sealed' && f.headers?.['anthropic-beta'] === 'oauth-2025-04-20')).toBe(true)
+  expect(calls.probes).toEqual([])
+  expect(await storedReading($)).toEqual({ percentUsed: 54, resetsMs: reset, at: now })
+  expect(calls.statuses.at(-1)).toBe('Week 54% / 39% allowed · today 15% over')
+})
+
+test('the account is named in /budget\'s reply', async ($, on) => {
+  const { clock } = engine(on, { store: shown, oauth: { profile: PROFILE, usage: usageAnswer(33) } })
+  await start($, clock)
+
+  expect((await run($, 'budget', '')).text).toBe(
+    '33% of 39% · 6% left today · resets Tue 20:00 · Experts-cpa (faneva@experts-cpa.com)',
+  )
+})
+
+test("the usage address failing falls back to /usage", async ($, on) => {
+  const { calls, clock } = engine(on, {
+    store: { ...shown, lastReading: reading(45, halfHourAgo) },
+    oauth: { profile: PROFILE },
+    usage: USAGE_48,
+  })
+
+  await start($, clock)
+
+  expect(calls.probes).toHaveLength(1)
+  expect(calls.statuses.at(-1)).toBe('Week 48% / 39% allowed · today 9% over')
+})
+
+test('with no first-party login neither address is asked', async ($, on) => {
+  const { calls, clock } = engine(on, { store: { ...shown, lastReading: reading(45, halfHourAgo) }, usage: USAGE_48 })
+
+  await start($, clock)
+
+  expect(calls.fetches).toEqual([])
+  expect(calls.probes).toHaveLength(1)
+})
+
+test("an account's own fetch is throttled for it alone", async ($, on) => {
+  const { calls, clock } = engine(on, {
+    store: { ...shown, probeAt: { 'acc-1': now - 5 * 60e3, cli: now - 5 * 60e3 } },
+    oauth: { profile: PROFILE, usage: usageAnswer(54) },
+  })
+
+  await start($, clock)
+
+  expect(calls.fetches.map(f => f.url)).toEqual(['https://api.anthropic.com/api/oauth/profile'])
+})
+
+test('settings follow an account whose week moves to another slot', { plugins: [probe] }, async ($, on) => {
+  const oldReset = reset - 3 * 60 * 60e3 // the account's week used to reset three hours earlier
+  const { clock } = engine(on, {
+    store: {
+      configs: { [accountSlot(oldReset)]: { ...pinned, mode: 'block' } },
+      accounts: { 'acc-1': { email: 'faneva@experts-cpa.com', slot: accountSlot(oldReset) } },
+    },
+    oauth: { profile: PROFILE, usage: usageAnswer(10) },
+  })
+
+  await start($, clock)
+
+  const configs = (await stored($, 'configs')) as Record<string, { mode: string }>
+  expect(configs[accountSlot(reset)]?.mode).toBe('block')
+  expect(((await stored($, 'accounts')) as Record<string, { slot: string }>)['acc-1']?.slot).toBe(accountSlot(reset))
 })

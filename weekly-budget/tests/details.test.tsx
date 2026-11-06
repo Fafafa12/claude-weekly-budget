@@ -2,7 +2,7 @@ import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, Plugin } from 'claude-code/testing'
 
-import { DEFAULT_CONFIG } from '../hooks/lib/config'
+import { accountSlot, DEFAULT_CONFIG } from '../hooks/lib/config'
 import type { Config } from '../hooks/lib/config'
 import { textBar } from '../hooks/lib/format'
 
@@ -379,6 +379,28 @@ for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
 
     expect((await ui.find({ type: 'Text', text: /^Leftover:/ }))?.text).toBe('Leftover: adaptive')
+    await ui.unmount()
+  })
+}
+
+const named = {
+  'acc-1': { email: 'faneva@experts-cpa.com', organization: 'Experts-cpa', organizationType: 'claude_team', slot: accountSlot(reset) },
+}
+for (const surface of SURFACES) {
+  test(`the details name the account on ${surface}`, async ($, on) => {
+    engine(on, { store: { config: pinned, lastReading: reading(33), accounts: named } })
+    const ui = await $.ui.mount({ ...PANE, surface })
+
+    expect((await ui.find({ type: 'Text', text: /^Account:/ }))?.props).toMatchObject({ dimColor: true })
+    expect((await ui.find({ type: 'Text', text: /^Account:/ }))?.text).toBe('Account: Experts-cpa (faneva@experts-cpa.com)')
+    await ui.unmount()
+  })
+
+  test(`an account not named yet is not named on ${surface}`, async ($, on) => {
+    engine(on, { store: { config: pinned, lastReading: reading(33) } })
+    const ui = await $.ui.mount({ ...PANE, surface })
+
+    expect(await ui.find({ type: 'Text', text: /^Account:/ })).toBeUndefined()
     await ui.unmount()
   })
 }

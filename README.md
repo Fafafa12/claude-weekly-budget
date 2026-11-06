@@ -26,7 +26,7 @@ Advanced: `WEEKLY_BUDGET_TZ_OFFSET_MIN` in the environment overrides the time zo
 
 ## Settings
 
-Run `/budget-config` to change them. **Each account has its own settings**, and the panel says which account it is changing ("Settings for the account whose week resets Tue 20:00"): an account is told by the weekday and time its week resets, the same every week. A change applies at once, in every open chat on that account. An account seen for the first time starts with a copy of the settings last used on the same app. Snooze is one for all. A value the plan's checks refuse, such as shares adding up to more than 100%, shows in red and changes nothing.
+Run `/budget-config` to change them. **Each account has its own settings**, and the panel says which account it is changing, by its name ("Settings for Experts-cpa (you@company.com)"), or before a chat on it has asked Anthropic, by when its week resets ("…the account whose week resets Tue 20:00"), the same weekday and time every week. A change applies at once, in every open chat on that account. An account seen for the first time starts with a copy of the settings last used on the same app. Snooze is one for all. A value the plan's checks refuse, such as shares adding up to more than 100%, shows in red and changes nothing.
 
 - **In VS Code**, click a choice.
 - **In the terminal**, the settings open with the keyboard on them: Tab or the arrow keys move, Enter chooses, Esc goes back to the prompt. To come back to the panel later, press `ctrl+x tab`.
@@ -42,7 +42,7 @@ Run `/budget-config` to change them. **Each account has its own settings**, and 
 | **Status line (terminal)** | Numbers · Bar · Minimal | Bar | The terminal's line under the prompt. No effect in VS Code or the desktop app, which have no such line. |
 | **Compact panel (VS Code)** | On · Off | On | The VS Code panel's view: compact (details behind "▸ Details") or full (details always shown). |
 
-The settings are kept in `~/.claude/plugins/store/`, shared by all your sessions. If Claude ever resets an account's week at an unusual time, that account's settings start again from a copy of the last ones used on that app.
+The settings are kept in `~/.claude/plugins/store/`, shared by all your sessions. If Claude ever resets an account's week at another time, its settings follow it, as long as a chat on it has asked Anthropic who it is.
 
 ### Leftover: Fixed or Adaptive
 
@@ -101,9 +101,15 @@ Claude Code on the web (claude.ai/code) and the regular Claude chat run no plugi
 
 The details are used, allowed by tonight, today's balance, when the week resets, your plan, the mode, and the snooze state with its buttons. Changing the view never closes the panel, and keeps what you opened with the toggle. The terminal is unchanged: `/budget` opens the details pane, and no panel opens by itself.
 
-The figures come from the usage Claude Code reports after each response, and also from Claude Code's own `/usage`, which the plugin runs in the background so that a chat shows a fresh figure before any reply: when a chat starts, when you run `/budget`, and when what is shown has gone over 15 minutes old (at most once every 10 minutes across all your chats, or every 30 seconds for `/budget`). That run (`claude -p --no-session-persistence --strict-mcp-config /usage`) takes a few seconds, sends nothing to the model, and is not saved as a session; it needs the `claude` command on your PATH, and it only moves the figure of a week a response has already told the plugin about. If it fails, or Claude Code words `/usage` differently, the plugin simply waits for replies, as before.
+The figures come from the usage Claude Code reports after each response, and also from Anthropic directly, so that a chat shows a fresh figure before any reply: when a chat starts, when you run `/budget`, and when what is shown has gone over 15 minutes old (at most once every 10 minutes per account across all your chats, or every 30 seconds for `/budget`). Each chat asks about **its own account**, with its own login (see [Your account](#your-account)). If that doesn't answer, the plugin runs Claude Code's own `/usage` in the background instead (`claude -p --no-session-persistence --strict-mcp-config /usage`: a few seconds, nothing sent to the model, not saved as a session, the `claude` command on your PATH), which goes by the terminal's login and only moves the figure of a week a response has already told the plugin about. If both fail, the plugin simply waits for replies.
 
 Before your first response in a new session, the plugin uses the highest reading another of your sessions reported in the same week. If there is none, it says "no reading yet". A reading over 15 minutes old is shown as last known everywhere: the status line and the VS Code panel's summary line end with "as of 14:00" ("as of Tue 14:00" when it is from an earlier day), and the details say "Last known, as of 14:00". A re-warn notification or a block reason built on such a reading ends with the same mark. Usage on claude.ai or the mobile app shows up after your next response in Claude Code.
+
+## Your account
+
+To name your accounts and fetch their usage, each chat asks Anthropic two things, with that chat's own Claude login: who the account is (its email and organization) and its weekly usage. Claude Code attaches the login itself, only for Anthropic's own servers: the plugin never sees your token or password. The answers are shown only to you: the account's name in the settings ("Settings for Experts-cpa (you@company.com)"), the details ("Account: …") and `/budget`'s reply. The plugin keeps the email, name and organization in its local store, `~/.claude/plugins/store/`, to remember which settings are whose.
+
+These are the addresses Claude's own apps use (`api.anthropic.com/api/oauth/profile` and `/usage`); they are not documented for plugins, so if Anthropic changes them, the plugin quietly goes back to telling accounts apart by when their week resets, and to the other sources of figures above.
 
 ## Requirements
 

@@ -313,7 +313,7 @@ for (const surface of SURFACES) {
     expect(calls.closes).toEqual([])
     expect(state.panes.map(p => p.id)).toEqual(['compact'])
     expect(calls.opens).toHaveLength(2)
-    expect(calls.opens.at(-1)).toMatchObject({ id: 'compact', rows: 18 })
+    expect(calls.opens.at(-1)).toMatchObject({ id: 'compact', rows: 19 })
     expect((await chosen(ui, 'compact-panel'))).toBe('off')
 
     await ui.press({ key: 'compact-panel-on' })
@@ -737,5 +737,19 @@ test('the status line row says it is the terminal\'s', async ($, on) => {
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
 
   expect(await ui.find({ type: 'Text', text: /^Status line \(terminal\)$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the settings name the account, once Anthropic has said who it is', async ($, on) => {
+  engine(on, {
+    store: {
+      config: DEFAULT_CONFIG,
+      lastReading: readingOf(33),
+      accounts: { 'acc-1': { email: 'faneva@experts-cpa.com', organization: 'Experts-cpa', organizationType: 'claude_team', slot: accountSlot(reset) } },
+    },
+  })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  expect((await ui.find({ type: 'Text', text: /^Settings for/ }))?.text).toBe('Settings for Experts-cpa (faneva@experts-cpa.com)')
   await ui.unmount()
 })

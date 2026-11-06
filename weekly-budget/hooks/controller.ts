@@ -1,6 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PromptSubmitInput, SessionRateLimit, UsageUnit } from 'claude-code'
 
+import { OAUTH_HEADERS, parseProfile, parseUsageApi, PROFILE_URL, USAGE_URL } from './lib/account'
+import type { Account } from './lib/account'
 import { accountSlot, pickConfig, validatePins } from './lib/config'
 import type { Config } from './lib/config'
 import { budgetReply, staleMark, statusLine } from './lib/format'
@@ -9,6 +11,8 @@ import { matchWeek, PROBE_ARGV, PROBE_ENV, parseUsageWeek, probedReading, should
 import type { Budget, Reading } from './lib/plan'
 import {
   STALE_MS,
+  labelForSlot,
+  loadAccounts,
   loadConfigVersionFor,
   loadConfigs,
   loadLegacyConfig,
@@ -17,6 +21,7 @@ import {
   loadSurfaceWeeks,
   loadWeeks,
   pickWeek,
+  saveAccount,
   saveAccountConfig,
   saveConfig,
   saveProbeAt,
@@ -44,14 +49,15 @@ export const compactRowsAtom = atom({ plugin: 'weekly-budget', key: 'compactRows
 export const stripHiddenAtom = atom({ plugin: 'weekly-budget', key: 'stripHidden' } as const, false)
 export const interactiveAtom = atom({ plugin: 'weekly-budget', key: 'interactive' } as const, false)
 export const surfaceAtom = atom({ plugin: 'weekly-budget', key: 'surface' } as const, null)
+export const accountAtom = atom({ plugin: 'weekly-budget', key: 'account' } as const, null)
 
 // VS Code's one panel. Its height is what it is asked for, in rows: the bar and the
 // toggle row while the compact view is collapsed, the bar with the details otherwise.
 // Counted from the layout (the bar is 2 rows, the toggle 1, the details about 12, and
-// a gap between each, the details now with the leftover line); to be tuned by eye in VS Code.
+// a gap between each, the details now with the leftover and account lines); to be tuned by eye in VS Code.
 const COMPACT = 'compact'
 const COLLAPSED_ROWS = 4
-const EXPANDED_ROWS = 18
+const EXPANDED_ROWS = 19
 
 // The host draws a pane's title in plain text, so the panel's only names it: the
 // summary, coloured by the state, is the panel's own first line.
@@ -86,7 +92,7 @@ export async function resolveTz($: EngineInterface): Promise<Tz> {
 
 // The store read into everything a decision or a display needs, at one `now`.
 async function loadView($: EngineInterface) {
-  const [now, tz, configs, legacy, snoozedUntil, own, weeks, surfaceWeeks, surface] = await Promise.all([
+  const [now, tz, configs, legacy, snoozedUntil, own, weeks, surfaceWeeks, surface, accounts] = await Promise.all([
     $.clock.now(),
     resolveTz($),
     loadConfigs($),
@@ -96,6 +102,7 @@ async function loadView($: EngineInterface) {
     loadWeeks($),
     loadSurfaceWeeks($),
     read($, surfaceAtom),
+    loadAccounts($),
   ])
   // This chat's account's week: its own replies say which; before the first, the one
   // its surface last saw, else the one read last (pickWeek). Its settings are that
@@ -104,18 +111,22 @@ async function loadView($: EngineInterface) {
   const { entry, reading, staleSince } = pickWeek(own, weeks, surfaceWeek, now)
   const accountWeek = reading?.resetsMs ?? null
   const cfg = pickConfig(configs, legacy, accountWeek, surfaceWeek)
+  // How that account is named, once a chat on it has asked Anthropic (null before).
+  const label = labelForSlot(accounts, accountWeek === null ? null : accountSlot(accountWeek))
   const budget =
     reading === null
       ? null
       : computeBudget(reading, cfg, now, tz, usageAtDayStart(reading, entry?.dayStart ?? null, now, tz))
-  return { now, tz, cfg, snoozedUntil, reading, staleSince, budget, accountWeek }
+  return { now, tz, cfg, snoozedUntil, reading, staleSince, budget, accountWeek, label }
 }
 
 // The settings a chat shows and changes: its account's, and which account that is
 // (the week it shows; null with no account seen yet).
-export async function currentSettings($: EngineInterface): Promise<{ cfg: Config; accountWeek: number | null; tz: Tz }> {
-  const { cfg, accountWeek, tz } = await loadView($)
-  return { cfg, accountWeek, tz }
+export async function currentSettings(
+  $: EngineInterface,
+): Promise<{ cfg: Config; accountWeek: number | null; label: string | null; tz: Tz }> {
+  const { cfg, accountWeek, label, tz } = await loadView($)
+  return { cfg, accountWeek, label, tz }
 }
 
 // Where the budget stands, on the better of this session's own reading and the one
@@ -128,9 +139,10 @@ export async function currentBudget($: EngineInterface): Promise<{
   snoozedUntil: number | null
   tz: Tz
   now: number
+  label: string | null
 }> {
-  const { budget, staleSince, cfg, snoozedUntil, tz, now } = await loadView($)
-  return { budget, staleSince, cfg, snoozedUntil, tz, now }
+  const { budget, staleSince, cfg, snoozedUntil, tz, now, label } = await loadView($)
+  return { budget, staleSince, cfg, snoozedUntil, tz, now, label }
 }
 
 // Brings the status line and the drawn panes up to the store.
@@ -317,12 +329,18 @@ async function acceptReading($: EngineInterface, reading: Reading, now: number, 
     read($, surfaceAtom),
   ])
   const surfaceWeek = surface === null ? null : (surfaceWeeks[surface] ?? null)
-  const cfg = pickConfig(configs, legacy, reading.resetsMs, surfaceWeek)
+  const slot = accountSlot(reading.resetsMs)
+  // The settings of an account whose week moved to another slot follow it there.
+  const account = isOwn ? await read($, accountAtom) : null
+  const accounts = account === null ? {} : await loadAccounts($)
+  const movedFrom = account === null ? null : (accounts[account.id]?.slot ?? null)
+  const followed = movedFrom !== null && movedFrom !== slot ? (configs[movedFrom] ?? null) : null
+  const cfg = configs[slot] ?? followed ?? pickConfig(configs, legacy, reading.resetsMs, surfaceWeek)
   if (isOwn) {
     if (reading !== (await read($, readingAtom))) await update($, readingAtom, () => reading)
     // An account seen for the first time starts with the settings last used here.
-    const slot = accountSlot(reading.resetsMs)
     if (configs[slot] === undefined) await saveAccountConfig($, slot, cfg)
+    if (account !== null) await saveAccount($, account, slot)
     if (surface !== null) await saveSurfaceWeek($, surface, reading.resetsMs)
   }
 
@@ -371,17 +389,62 @@ export async function setSurface($: EngineInterface, surface: string | null): Pr
 // every 30 seconds when /budget asks. Never in the Claude Code a probe starts, nor in
 // a session no one drives; never without a week a reading already knows. Its figure
 // is taken as this session's own reading.
+// Who this chat is signed in as, asked once of Anthropic with its own login through the
+// sealed handle (the plugin never holds the token); null with no first-party login, or
+// when the address answers otherwise.
+export async function identifyAccount($: EngineInterface): Promise<Account | null> {
+  const known = await read($, accountAtom)
+  if (known !== null) return known
+  const auth = await $.session.authorize()
+  if (auth === null) return null
+  const answer = await $.http.fetch(PROFILE_URL, { auth: auth.handle, headers: { ...OAUTH_HEADERS } })
+  const account = answer.ok ? parseProfile(JSON.parse(answer.text)) : null
+  if (account === null) return null
+  await update($, accountAtom, () => account)
+  const own = await read($, readingAtom)
+  await saveAccount($, account, own === null ? null : accountSlot(own.resetsMs))
+  return account
+}
+
+// This chat's own account's week, asked of Anthropic with its own login: a reading of
+// the chat's own, exact to the second. False when there is none to have.
+async function fetchOwnWeek($: EngineInterface): Promise<boolean> {
+  const auth = await $.session.authorize()
+  if (auth === null) return false
+  const answer = await $.http.fetch(USAGE_URL, { auth: auth.handle, headers: { ...OAUTH_HEADERS } })
+  if (!answer.ok) return false
+  const now = await $.clock.now()
+  const reading = parseUsageApi(JSON.parse(answer.text), now)
+  if (reading === null || reading.resetsMs <= now) return false
+  await acceptReading($, reading, now, true)
+  return true
+}
+
+// A fresh figure without waiting for a reply, at most every 10 minutes per account
+// across all chats on its own and every 30 seconds when /budget asks; never in the
+// Claude Code a probe starts, nor in a session no one drives. First the chat's own
+// account's week, from Anthropic; failing that, Claude Code's own /usage, run with the
+// terminal's login (lib/probe.ts): its figure goes to the week whose reset it names,
+// which may be another account's than this chat's.
 export async function probeUsage($: EngineInterface, isAsked: boolean): Promise<void> {
   if ((await $.env.get('WEEKLY_BUDGET_PROBE')) !== undefined) return
   if (!(await read($, interactiveAtom))) return
-  const [now, tz, weeks, lastAt] = await Promise.all([$.clock.now(), resolveTz($), loadWeeks($), loadProbeAt($)])
+  const account = await identifyAccount($).catch(() => null)
+  const now = await $.clock.now()
+  if (account !== null) {
+    if (!shouldProbe(await loadProbeAt($, account.id), now, isAsked)) return
+    await saveProbeAt($, account.id, now)
+    if (await fetchOwnWeek($).catch(() => false)) {
+      await refresh($)
+      return
+    }
+  }
+  const [tz, weeks, lastAt] = await Promise.all([resolveTz($), loadWeeks($), loadProbeAt($, 'cli')])
   const live = weeks.filter(w => w.reading.resetsMs > now)
   if (live.length === 0 || !shouldProbe(lastAt, now, isAsked)) return
-  await saveProbeAt($, now)
+  await saveProbeAt($, 'cli', now)
   const ran = await $.process.run(PROBE_ARGV, { env: { [PROBE_ENV]: '1' }, timeoutMs: 20_000 })
   if (ran.exitCode !== 0) return
-  // /usage runs with the terminal's login: its figure is for the week whose reset it
-  // names, which may be another account's than this chat's.
   const percent = parseUsageWeek(ran.stdout)
   const weekKey = matchWeek(ran.stdout, live.map(w => w.reading.resetsMs), tz)
   const week = live.find(w => w.reading.resetsMs === weekKey)
@@ -472,8 +535,9 @@ export async function runBudgetCommand($: EngineInterface, args: string): Promis
     // A fresh figure for the reply, without waiting for a reply of Claude's.
     await probeUsageQuietly($, true)
     try {
-      const { budget, staleSince, tz, now } = await loadView($)
-      return budgetReply(budget, staleSince, tz, now)
+      const { budget, staleSince, tz, now, label } = await loadView($)
+      const reply = budgetReply(budget, staleSince, tz, now)
+      return label === null ? reply : `${reply} · ${label}`
     } catch {
       return done
     }

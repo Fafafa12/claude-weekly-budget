@@ -179,10 +179,12 @@ function choiceRow(
   )
 }
 
-// Which account the settings are for: the one whose week resets at the time the chat
-// shows (each account resets at its own weekday and time); none seen yet, every account.
-function whoseSettings(accountWeek: number | null, tz: Tz): string {
+// Which account the settings are for: by its name once a chat on it has asked Anthropic;
+// else the one whose week resets at the time the chat shows (each account resets at its
+// own weekday and time); none seen yet, every account.
+function whoseSettings(accountWeek: number | null, label: string | null, tz: Tz): string {
   if (accountWeek === null) return 'Settings for every account, until one is seen'
+  if (label !== null) return `Settings for ${label}`
   return `Settings for the account whose week resets ${DAY_NAMES[tz.weekday(accountWeek)]} ${tz.hhmm(accountWeek)}`
 }
 
@@ -204,12 +206,12 @@ export async function renderSettings($: EngineInterface, e: RenderInput<'Pane'>)
   }
   const els = $.ui.resolve(e)
   const { Box, Button, Input, Text } = els
-  const [{ cfg, accountWeek, tz }, picked, error] = await Promise.all([currentSettings($), getPinDraftDays($), getSettingsError($)])
+  const [{ cfg, accountWeek, label, tz }, picked, error] = await Promise.all([currentSettings($), getPinDraftDays($), getSettingsError($)])
 
   return (
     <Box flexDirection="column" gap={1}>
       {e.surface === 'terminal' && <Text dimColor>{KEY_HINT}</Text>}
-      <Text weight="semibold">{whoseSettings(accountWeek, tz)}</Text>
+      <Text weight="semibold">{whoseSettings(accountWeek, label, tz)}</Text>
       {error !== null && <Text color="error">{error}</Text>}
       <Box flexDirection="column">
         {choiceRow(els, 'pin-days', 'Pin', PIN_GROUPS, pinGroup(picked).value, days => setPinDraftDays($, days))}

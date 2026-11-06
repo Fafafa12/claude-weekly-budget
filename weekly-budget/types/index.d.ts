@@ -21,6 +21,14 @@ export type Config = {
   leftover: Leftover
 }
 export type Reading = { percentUsed: number; resetsMs: number; at: number }
+// Who a chat is signed in as, as Anthropic names it to the chat's own login.
+export type Account = {
+  id: string
+  email: string | null
+  name: string | null
+  organization: string | null
+  organizationType: string | null
+}
 // What had been used when a local day of a week began, as the first reading of that day knew it.
 export type DayStart = { weekKey: number; dayKey: string; percentUsed: number }
 
@@ -36,6 +44,7 @@ declare module 'claude-code' {
       stripHidden: boolean // the desktop strip was closed with its ✕ in this chat; /budget shows it again
       interactive: boolean // a session a person drives: only those run the /usage probe
       surface: string | null // the surface the session started on: each may be signed in to its own account
+      account: Account | null // who this chat is signed in as, once Anthropic has said
     }
   }
 }

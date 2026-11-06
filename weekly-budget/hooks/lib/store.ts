@@ -2,6 +2,8 @@ import type { EngineInterface } from 'claude-code'
 
 import { normalizeConfig } from './config'
 import type { Config } from './config'
+import { accountLabel } from './account'
+import type { Account } from './account'
 import type { DayStart, Reading } from './plan'
 import type { Ledger } from './warnings'
 
@@ -26,6 +28,7 @@ const KEY = {
   weeks: 'weeks',
   surfaceWeeks: 'surfaceWeeks',
   configs: 'configs',
+  accounts: 'accounts',
 } as const
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -84,14 +87,60 @@ export async function saveSnooze($: EngineInterface, until: number | null): Prom
   await $.store.set(KEY.snooze, { until })
 }
 
-// When the last /usage probe ran, in any session: so that chats don't each run one.
-export async function loadProbeAt($: EngineInterface): Promise<number | null> {
+// When each account's figure was last fetched, in any session, so that chats don't
+// each fetch one: by account id, or "cli" for /usage run with the terminal's login.
+export async function loadProbeAt($: EngineInterface, key: string): Promise<number | null> {
   const v = await $.store.get(KEY.probeAt)
-  return isRecord(v) && isNum(v.at) ? v.at : null
+  return isRecord(v) && isNum(v[key]) ? v[key] : null
 }
 
-export async function saveProbeAt($: EngineInterface, at: number): Promise<void> {
-  await $.store.set(KEY.probeAt, { at })
+export async function saveProbeAt($: EngineInterface, key: string, at: number): Promise<void> {
+  const v = await $.store.get(KEY.probeAt)
+  await $.store.set(KEY.probeAt, { ...(isRecord(v) ? v : {}), [key]: at })
+}
+
+// The accounts chats here have been signed in to, as Anthropic named them to each chat's
+// own login (lib/account.ts), each with the weekly slot its week was last seen in.
+export type StoredAccount = Account & { slot: string | null }
+
+export async function loadAccounts($: EngineInterface): Promise<Record<string, StoredAccount>> {
+  const v = await $.store.get(KEY.accounts)
+  if (!isRecord(v)) return {}
+  const strOrNull = (x: unknown): string | null => (typeof x === 'string' ? x : null)
+  return Object.fromEntries(
+    Object.entries(v).flatMap(([id, a]) =>
+      isRecord(a)
+        ? [
+            [
+              id,
+              {
+                id,
+                email: strOrNull(a.email),
+                name: strOrNull(a.name),
+                organization: strOrNull(a.organization),
+                organizationType: strOrNull(a.organizationType),
+                slot: strOrNull(a.slot),
+              },
+            ],
+          ]
+        : [],
+    ),
+  )
+}
+
+// Keeps what Anthropic says of an account, and the slot its week is in when a reading
+// says (null keeps the one known).
+export async function saveAccount($: EngineInterface, a: Account, slot: string | null): Promise<void> {
+  const accounts = await loadAccounts($)
+  const known = accounts[a.id]
+  const next: StoredAccount = { ...a, slot: slot ?? known?.slot ?? null }
+  if (JSON.stringify(known) !== JSON.stringify(next)) await $.store.set(KEY.accounts, { ...accounts, [a.id]: next })
+}
+
+// How the account a weekly slot was last seen with is named on screen; none known, null.
+export function labelForSlot(accounts: Readonly<Record<string, StoredAccount>>, slot: string | null): string | null {
+  if (slot === null) return null
+  return accountLabel(Object.values(accounts).find(a => a.slot === slot) ?? null)
 }
 
 // Every account on this machine has its own weekly limit, and no session can tell

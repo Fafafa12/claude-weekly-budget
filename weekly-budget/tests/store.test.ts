@@ -3,12 +3,17 @@ import { expect, test } from 'claude-code/testing'
 
 import { DEFAULT_CONFIG } from '../hooks/lib/config'
 import {
+  labelForSlot,
+  loadAccounts,
   loadConfig,
+  loadProbeAt,
   loadSnooze,
   loadSurfaceWeeks,
   loadWeeks,
   pickWeek,
+  saveAccount,
   saveConfig,
+  saveProbeAt,
   saveSnooze,
   saveSurfaceWeek,
   saveWeekDayStart,
@@ -181,4 +186,31 @@ test('pickWeek ignores weeks that are over, and marks an old reading stale', asy
   expect(pickWeek(null, [weekOf(old)], null, now).staleSince).toBe(old.at)
   expect(pickWeek(null, [weekOf(at(49, team, now - STALE_MS))], null, now).staleSince).toBeNull()
   expect(pickWeek(null, [], null, now)).toEqual({ entry: null, reading: null, staleSince: null })
+})
+
+const acc = { id: 'acc-1', email: 'faneva@experts-cpa.com', name: 'Faneva', organization: 'Experts-cpa', organizationType: 'claude_team' }
+
+test('an account is kept with the weekly slot it was last seen in', async () => {
+  const $ = fakeEngine()
+  expect(await loadAccounts($)).toEqual({})
+  await saveAccount($, acc, null)
+  await saveAccount($, acc, '61200000')
+  await saveAccount($, { ...acc, email: 'new@experts-cpa.com' }, null)
+  expect(await loadAccounts($)).toEqual({ 'acc-1': { ...acc, email: 'new@experts-cpa.com', slot: '61200000' } })
+})
+
+test('labelForSlot names the account a slot was last seen with', async () => {
+  const accounts = { 'acc-1': { ...acc, slot: '61200000' } }
+  expect(labelForSlot(accounts, '61200000')).toBe('Experts-cpa (faneva@experts-cpa.com)')
+  expect(labelForSlot(accounts, '1')).toBeNull()
+  expect(labelForSlot(accounts, null)).toBeNull()
+})
+
+test('the last refresh is kept per account, and an old single one is no one\'s', async () => {
+  const $ = fakeEngine({ probeAt: { at: now } })
+  expect(await loadProbeAt($, 'acc-1')).toBeNull()
+  await saveProbeAt($, 'acc-1', now)
+  await saveProbeAt($, 'cli', now - MIN_MS)
+  expect(await loadProbeAt($, 'acc-1')).toBe(now)
+  expect(await loadProbeAt($, 'cli')).toBe(now - MIN_MS)
 })

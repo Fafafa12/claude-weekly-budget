@@ -68,7 +68,7 @@ type Calls = { opens: PaneOpenArgs[]; closes: string[] }
 
 // The panel's two heights: the bar and the toggle row, or the bar with the details.
 const COLLAPSED_ROWS = 4
-const EXPANDED_ROWS = 18
+const EXPANDED_ROWS = 19
 
 // Everything beneath the plugin: the clock, environment and store, and an engine
 // that keeps its panes as the real one does, so that a pane the test closes is gone

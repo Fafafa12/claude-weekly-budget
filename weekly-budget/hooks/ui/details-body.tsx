@@ -39,13 +39,14 @@ async function snoozeFor($: EngineInterface, span: Span): Promise<void> {
 export function renderDetailsBody(
   $: EngineInterface,
   e: RenderInput<'Pane'>,
-  { budget, staleSince, cfg, snoozedUntil, tz, now }: BudgetView,
+  { budget, staleSince, cfg, snoozedUntil, tz, now, label }: BudgetView,
 ): RenderElement {
   const { Box, Button, Text } = $.ui.resolve(e)
   const isSnoozed = snoozedUntil !== null && snoozedUntil > now
 
   return (
     <Box flexDirection="column" gap={1}>
+      {label !== null && <Text dimColor>{`Account: ${label}`}</Text>}
       {budget !== null && (
         <Box flexDirection="column">
           {staleSince !== null && <Text dimColor>{`Last known, as of ${asOf(staleSince, tz, now)}`}</Text>}
