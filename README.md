@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Fafafa12/claude-weekly-budget/actions/workflows/test.yml"><img src="https://github.com/Fafafa12/claude-weekly-budget/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
   <img src="https://img.shields.io/badge/version-0.7.0-D97757" alt="Version 0.7.0">
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" alt="A Claude Code plugin">
   <img src="https://img.shields.io/badge/license-MIT-8CB88A" alt="MIT license">
@@ -286,10 +287,11 @@ weekly-budget/            the plugin
   hooks/ui/               the panes, the VS Code panel and the desktop strip
   tests/                  the test suite (claude plugin test)
 scripts/screens.ts        draws the pictures in assets/screens/
+.github/workflows/        tests on every push and pull request
 ```
 
-- **Tests:** `claude plugin test weekly-budget` from the repository root. They fake the engine and need no Claude login. Before a release, also run `claude plugin validate .` and `claude plugin validate weekly-budget`.
-- **Types:** `tsc -p weekly-budget`. It needs `weekly-budget/.claude-plugin/types/`, which a Claude session writes when it loads the plugin (it's gitignored), so open `claude --plugin-dir ./weekly-budget` once on a fresh clone.
+- **Tests:** `claude plugin test weekly-budget` from the repository root. They fake the engine and need no Claude login. GitHub runs them, plus `claude plugin validate` on the marketplace and the plugin, on every push and pull request.
+- **Types:** `tsc -p weekly-budget`. It needs `weekly-budget/.claude-plugin/types/`, which a Claude session writes when it loads the plugin (it's gitignored), so open `claude --plugin-dir ./weekly-budget` once on a fresh clone. GitHub skips this step for that reason.
 - **Pictures:** `npx tsx scripts/screens.ts` redraws `assets/screens/` from the plugin's own code.
 
 Contributions are welcome; tests first, please. The suite is 400-odd tests, and they will notice.
