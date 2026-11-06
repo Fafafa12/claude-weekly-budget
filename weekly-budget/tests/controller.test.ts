@@ -44,15 +44,21 @@ type Calls = {
   toasts: string[]
   opens: { id: string; title?: string }[]
   registered: string[]
+  probes: { argv: readonly string[]; env?: Readonly<Record<string, string>> }[]
 }
 
 // Everything beneath the plugin: the clock, environment and store, and what the
 // engine does with the plugin's display calls, recorded.
 function engine(
   on: On,
-  options: { store?: Record<string, unknown> | null; surfaces?: RenderSurface[]; env?: Record<string, string> } = {},
+  options: {
+    store?: Record<string, unknown> | null
+    surfaces?: RenderSurface[]
+    env?: Record<string, string>
+    usage?: string // what `claude -p /usage` prints; absent, it fails
+  } = {},
 ) {
-  const calls: Calls = { surfaceAsks: 0, statuses: [], toasts: [], opens: [], registered: [] }
+  const calls: Calls = { surfaceAsks: 0, statuses: [], toasts: [], opens: [], registered: [], probes: [] }
   const clock = mock.clock(on, { now })
   mock.env(on, options.env ?? { WEEKLY_BUDGET_TZ_OFFSET_MIN: '180' })
   if (options.store !== null) mock.store(on, options.store ?? {})
@@ -83,6 +89,13 @@ function engine(
   on('session.attach', (_, e) => ({ clientId: e.clientId }))
   on('session.measure', (_, e) => ({ changed: e.changed }))
   on('prompt.submit', (_, e) => ({ text: e.text }))
+  on('process.run', (_, e) => {
+    calls.probes.push({ argv: e.argv, env: e.init?.env })
+    const ok = options.usage !== undefined
+    return {
+      value: { exitCode: ok ? 0 : 1, stdout: options.usage ?? '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
+    }
+  })
   return { calls, clock }
 }
 
@@ -768,4 +781,106 @@ test('a day already recorded is not recorded again', { plugins: [probe] }, async
   await measure($, 14)
 
   expect(await stored($, 'dayStart')).toEqual(today)
+})
+
+// A fresh figure without a reply: Claude Code's own /usage, run in the background.
+const USAGE_48 = 'Current session: 30% used · resets Nov 5, 2:39pm\nCurrent week (all models): 48% used · resets Nov 10, 8pm\n'
+const PROBE = ['claude', '-p', '--no-session-persistence', '--strict-mcp-config', '/usage']
+const halfHourAgo = now - 30 * 60e3
+const shown = { config: { ...pinned, statusStyle: 'A' } }
+
+test('a chat that starts runs /usage and shows its fresh figure', { plugins: [probe] }, async ($, on) => {
+  const { calls, clock } = engine(on, { store: { ...shown, lastReading: reading(45, halfHourAgo) }, usage: USAGE_48 })
+
+  await start($, clock)
+
+  expect(calls.probes).toEqual([{ argv: PROBE, env: { WEEKLY_BUDGET_PROBE: '1' } }])
+  expect(calls.statuses.at(-1)).toBe('Week 48% / 39% allowed · today 9% over')
+  expect(await stored($, 'lastReading')).toEqual({ percentUsed: 48, resetsMs: reset, at: now })
+})
+
+test('a session that is not interactive does not probe', async ($, on) => {
+  const { calls, clock } = engine(on, { store: { ...shown, lastReading: reading(45, halfHourAgo) }, usage: USAGE_48 })
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: false })
+  await clock.settle()
+
+  expect(calls.probes).toEqual([])
+})
+
+test('the Claude Code a probe starts does not probe in turn', async ($, on) => {
+  const { calls, clock } = engine(on, {
+    store: { ...shown, lastReading: reading(45, halfHourAgo) },
+    usage: USAGE_48,
+    env: { WEEKLY_BUDGET_TZ_OFFSET_MIN: '180', WEEKLY_BUDGET_PROBE: '1' },
+  })
+
+  await start($, clock)
+
+  expect(calls.probes).toEqual([])
+})
+
+test('a probe in any chat in the last 10 minutes stands for this one', async ($, on) => {
+  const { calls, clock } = engine(on, {
+    store: { ...shown, lastReading: reading(45, halfHourAgo), probeAt: { at: now - 5 * 60e3 } },
+    usage: USAGE_48,
+  })
+
+  await start($, clock)
+
+  expect(calls.probes).toEqual([])
+})
+
+test('/budget probes when asked, unless one just ran', async ($, on) => {
+  const { calls, clock } = engine(on, {
+    store: { ...shown, lastReading: reading(45, halfHourAgo), probeAt: { at: now - 2 * 60e3 } },
+    usage: USAGE_48,
+  })
+  // The start doesn't probe (one ran 2 minutes ago); /budget, asking, does.
+  await start($, clock)
+  expect(calls.probes).toHaveLength(0)
+
+  await run($, 'budget', '')
+  await clock.settle()
+  expect(calls.probes).toHaveLength(1)
+  expect(calls.statuses.at(-1)).toBe('Week 48% / 39% allowed · today 9% over')
+
+  await run($, 'budget', '')
+  await clock.settle()
+  expect(calls.probes).toHaveLength(1)
+})
+
+test('with no week known yet there is nothing to probe for', async ($, on) => {
+  const { calls, clock } = engine(on, { store: shown, usage: USAGE_48 })
+
+  await start($, clock)
+
+  expect(calls.probes).toEqual([])
+})
+
+test('a probe that fails, or prints something else, changes nothing', { plugins: [probe] }, async ($, on) => {
+  const { calls, clock } = engine(on, { store: { ...shown, lastReading: reading(45, halfHourAgo) } })
+
+  await start($, clock)
+
+  expect(calls.probes).toHaveLength(1)
+  expect(await stored($, 'lastReading')).toEqual(reading(45, halfHourAgo))
+  expect(calls.statuses.at(-1)).toBe('Week 45% / 39% allowed · today 6% over · as of 14:30')
+})
+
+test('a reading going stale is probed again, at most every 10 minutes', async ($, on) => {
+  const { calls, clock } = engine(on, {
+    store: { ...shown, lastReading: reading(45, now - 5 * 60e3) },
+    usage: USAGE_48,
+  })
+
+  await start($, clock)
+  // Fresh at the start: probed once (nothing ran in the last 10 minutes).
+  expect(calls.probes).toHaveLength(1)
+  // The probe made it fresh; 11 minutes on it is not stale yet, so no new probe.
+  await clock.advance(11 * 60e3)
+  expect(calls.probes).toHaveLength(1)
+  // 16 minutes on it is stale, and the last probe was 16 minutes ago: probe again.
+  await clock.advance(5 * 60e3)
+  expect(calls.probes).toHaveLength(2)
 })

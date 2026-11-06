@@ -1,6 +1,17 @@
 import type { Register } from 'claude-code'
 
-import { ensureCompact, onMeasure, onPrompt, openSettings, refreshQuietly, runBudgetCommand, showToast } from './controller'
+import {
+  ensureCompact,
+  onMeasure,
+  onPrompt,
+  openSettings,
+  probeUsageQuietly,
+  refreshQuietly,
+  runBudgetCommand,
+  setInteractive,
+  showToast,
+  tickQuietly,
+} from './controller'
 import { renderCompact } from './ui/compact'
 import { renderDetails } from './ui/details'
 import { renderSettings } from './ui/settings'
@@ -16,9 +27,12 @@ export const register: Register = on => {
       name: 'budget-config',
       description: 'Set your weekly Claude budget plan and warnings',
     })
-    $.clock.every(60_000, () => void refreshQuietly($))
+    await setInteractive($, e.isInteractive)
+    $.clock.every(60_000, () => void tickQuietly($))
     void refreshQuietly($)
     void ensureCompact($).catch(() => {})
+    // A fresh figure for the chat that starts, without waiting for its first reply.
+    void probeUsageQuietly($, false)
 
     return next(e)
   })

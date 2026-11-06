@@ -1,6 +1,6 @@
 {
   "name": "weekly-budget",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "license": "MIT",
   "author": { "name": "anjrakot" },
   "icon": "./.claude-plugin/icon.png",

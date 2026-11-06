@@ -34,6 +34,7 @@ declare module 'claude-code' {
       detailsExpanded: boolean // the panel's compact view shows its details under the bar (the toggle's state)
       compactRows: number | null // the rows the panel was last opened with: the engine's pane list has no rows
       stripHidden: boolean // the desktop strip was closed with its ✕ in this chat; /budget shows it again
+      interactive: boolean // a session a person drives: only those run the /usage probe
     }
   }
 }

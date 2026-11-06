@@ -22,6 +22,7 @@ const KEY = {
   ledger: 'ledger',
   reading: 'lastReading',
   dayStart: 'dayStart',
+  probeAt: 'probeAt',
 } as const
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -76,6 +77,16 @@ export async function loadDayStart($: EngineInterface): Promise<DayStart | null>
 
 export async function saveDayStart($: EngineInterface, d: DayStart): Promise<void> {
   await $.store.set(KEY.dayStart, d)
+}
+
+// When the last /usage probe ran, in any session: so that chats don't each run one.
+export async function loadProbeAt($: EngineInterface): Promise<number | null> {
+  const v = await $.store.get(KEY.probeAt)
+  return isRecord(v) && isNum(v.at) ? v.at : null
+}
+
+export async function saveProbeAt($: EngineInterface, at: number): Promise<void> {
+  await $.store.set(KEY.probeAt, { at })
 }
 
 export async function loadSharedReading($: EngineInterface): Promise<Reading | null> {
