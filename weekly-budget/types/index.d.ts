@@ -33,6 +33,7 @@ declare module 'claude-code' {
       compactOpened: boolean // this session has opened VS Code's panel, so it never reopens one the person closed
       detailsExpanded: boolean // the panel's compact view shows its details under the bar (the toggle's state)
       compactRows: number | null // the rows the panel was last opened with: the engine's pane list has no rows
+      stripHidden: boolean // the desktop strip was closed with its ✕ in this chat; /budget shows it again
     }
   }
 }

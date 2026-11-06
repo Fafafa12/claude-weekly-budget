@@ -36,6 +36,7 @@ export const pinDraftDaysAtom = atom({ plugin: 'weekly-budget', key: 'pinDraftDa
 export const compactOpenedAtom = atom({ plugin: 'weekly-budget', key: 'compactOpened' } as const, false)
 export const detailsExpandedAtom = atom({ plugin: 'weekly-budget', key: 'detailsExpanded' } as const, false)
 export const compactRowsAtom = atom({ plugin: 'weekly-budget', key: 'compactRows' } as const, null)
+export const stripHiddenAtom = atom({ plugin: 'weekly-budget', key: 'stripHidden' } as const, false)
 
 // VS Code's one panel. Its height is what it is asked for, in rows: the bar and the
 // toggle row while the compact view is collapsed, the bar with the details otherwise.
@@ -177,6 +178,17 @@ export async function toggleDetails($: EngineInterface): Promise<void> {
   const isExpanded = await update($, detailsExpandedAtom, was => !was)
   if (!(await $.ui.panes()).some(p => p.id === COMPACT)) return
   await openPane($, compactPane(await loadView($), isExpanded))
+}
+
+// The desktop strip, closed with its ✕ for this chat (the session's state), and shown
+// again by /budget.
+export async function isStripHidden($: EngineInterface): Promise<boolean> {
+  return read($, stripHiddenAtom)
+}
+
+export async function hideStrip($: EngineInterface): Promise<void> {
+  await update($, stripHiddenAtom, () => true)
+  $.ui.invalidate('ui.render')
 }
 
 export async function getDetailsExpanded($: EngineInterface): Promise<boolean> {
@@ -333,6 +345,11 @@ export async function runBudgetCommand($: EngineInterface, args: string): Promis
       const plain = { id: COMPACT, title: COMPACT_TITLE, rows: COLLAPSED_ROWS }
       await openCompact($, await currentCompactPane($).catch(() => plain))
       return 'Budget panel opened.'
+    }
+    // A strip closed in this chat comes back with the details.
+    if (await read($, stripHiddenAtom)) {
+      await update($, stripHiddenAtom, () => false)
+      $.ui.invalidate('ui.render')
     }
     await openDetails($)
     return 'Budget details opened.'

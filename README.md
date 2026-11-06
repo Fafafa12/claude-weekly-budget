@@ -88,7 +88,7 @@ Block goes by the highest reading from any of your sessions in the current week,
 
 Claude Code draws the status line itself: it puts "⚠ weekly-budget:" in front and decides the colour, which is why the words and the bar's ▓ (past what the plan allows) carry the state. In the panels the state reads as a coloured word: On track, Running low, Over today. In VS Code the plugin shows the panel and no status line.
 
-**In the Claude desktop app** (its Code tab, on macOS, Windows or the Linux beta), the budget is a thin strip just above the message box: the coloured summary line with a quiet "▸ Details" link, and the bar under it. "▸ Details" and `/budget` open the full details in the panel beside the conversation, and `/budget-config` opens the settings there. No panel opens by itself, and Claude's own [-] on the strip folds it away. Install the plugin from the desktop app's plugin settings, or let it load from a project that has it.
+**In the Claude desktop app** (its Code tab, on macOS, Windows or the Linux beta), the budget is a thin strip just above the message box: the coloured summary line with a quiet "▸ Details" link, and the bar under it. "▸ Details" and `/budget` open the full details in the panel beside the conversation, and `/budget-config` opens the settings there. No panel opens by itself. The strip's ✕ hides it for that chat (a new chat shows it again), and `/budget` brings it back. Install the plugin from the desktop app's plugin settings, or let it load from a project that has it.
 
 Claude Code on the web (claude.ai/code) and the regular Claude chat run no plugins, so the budget can't show there; their usage still counts, and appears here after your next response.
 

@@ -849,3 +849,45 @@ test('/budget on the desktop opens the details in the side panel', async ($, on)
   expect(result.text).toBe('Budget details opened.')
   expect(calls.opens).toEqual([{ id: 'details', title: 'Weekly budget' }])
 })
+
+// The desktop app draws no fold mark for the strip, so it has its own ✕: hidden for
+// this chat (a new chat shows it again), and /budget brings it back.
+const engineBelow = (on: On) =>
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+
+test('the strip has a quiet close button', async ($, on) => {
+  engine(on, { store: { config: pinned, lastReading: reading(33) } })
+  const ui = await $.ui.mount({ ...STRIP, surface: 'desktop' })
+
+  expect((await ui.find({ key: 'strip-close' }))?.props).toMatchObject({ label: '✕', plain: true, dimColor: true })
+  await ui.unmount()
+})
+
+test('closing the strip hides it for the chat', async ($, on) => {
+  engine(on, { store: { config: pinned, lastReading: reading(33) }, surfaces: ['desktop'] })
+  engineBelow(on)
+  const ui = await $.ui.mount({ ...STRIP, surface: 'desktop' })
+
+  await ui.press({ key: 'strip-close' })
+
+  expect(await ui.find({ key: 'strip-details' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /engine/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('/budget brings the closed strip back, and opens the details', async ($, on) => {
+  const { calls } = engine(on, { store: { config: pinned, lastReading: reading(33) }, surfaces: ['desktop'] })
+  engineBelow(on)
+  const ui = await $.ui.mount({ ...STRIP, surface: 'desktop' })
+  await ui.press({ key: 'strip-close' })
+
+  const result = await run($, 'budget')
+
+  expect(result.text).toBe('Budget details opened.')
+  expect(calls.opens).toEqual([{ id: 'details', title: 'Weekly budget' }])
+  expect(await ui.find({ key: 'strip-details' })).toBeDefined()
+  await ui.unmount()
+})
