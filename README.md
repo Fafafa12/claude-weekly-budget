@@ -2,7 +2,7 @@
 
 Your Claude subscription has a weekly usage limit. This plugin lets you plan how to spend it. You say how the week should be shared out across the days, and it shows where you stand against that plan, warns you when you run ahead of it, and can hold your next message back until you decide to carry on.
 
-It works in the terminal and in the VS Code extension.
+It works in the terminal, in the VS Code extension and in the Claude desktop app.
 
 ## How the plan works
 
@@ -77,7 +77,7 @@ To keep it quiet, the heads-up and the over warning each fire at most once per l
 
 Block goes by the highest reading from any of your sessions in the current week, so the first message of a new chat is held back too. It lets messages through when there is no reading for this week yet, or if the plugin itself fails.
 
-## Terminal and VS Code
+## Terminal, VS Code and the desktop app
 
 |  | Terminal | VS Code |
 | --- | --- | --- |
@@ -87,6 +87,10 @@ Block goes by the highest reading from any of your sessions in the current week,
 | Making it smaller | Pick the minimal style. | Keep the compact view, or close the panel with its X, and it stays closed for that chat until you run `/budget`. |
 
 Claude Code draws the status line itself: it puts "⚠ weekly-budget:" in front and decides the colour, which is why the words and the bar's ▓ (past what the plan allows) carry the state. In the panels the state reads as a coloured word: On track, Running low, Over today. In VS Code the plugin shows the panel and no status line.
+
+**In the Claude desktop app** (its Code tab, on macOS, Windows or the Linux beta), the budget is a thin strip just above the message box: the coloured summary line with a quiet "▸ Details" link, and the bar under it. "▸ Details" and `/budget` open the full details in the panel beside the conversation, and `/budget-config` opens the settings there. No panel opens by itself, and Claude's own [-] on the strip folds it away. Install the plugin from the desktop app's plugin settings, or let it load from a project that has it.
+
+Claude Code on the web (claude.ai/code) and the regular Claude chat run no plugins, so the budget can't show there; their usage still counts, and appears here after your next response.
 
 **The VS Code panel has two views**, which you choose with **Compact panel (VS Code)** in `/budget-config`:
 

@@ -158,9 +158,15 @@ async function openCompact($: EngineInterface, pane: ReturnType<typeof compactPa
 // but the terminal, which has the status line. In either view. Once a session has
 // opened it, it never does again, so a pane the person closed stays closed; only
 // /budget brings it back.
+// The surfaces that show the budget in the compact panel: those with no place of
+// their own for it. The terminal has its status line, and the desktop app its strip
+// above the message box (the AbovePrompt band, ui/strip.tsx).
+const hasPanelSurface = (surfaces: readonly string[]): boolean =>
+  surfaces.some(s => s !== 'terminal' && s !== 'desktop')
+
 export async function ensureCompact($: EngineInterface): Promise<void> {
   if (await read($, compactOpenedAtom)) return
-  if (!(await $.session.surfaces()).some(s => s !== 'terminal')) return
+  if (!hasPanelSurface(await $.session.surfaces())) return
   await openCompact($, await currentCompactPane($))
 }
 
@@ -312,17 +318,23 @@ export async function showToast($: EngineInterface, toast: Toast): Promise<void>
 // after the person closed it, and the details pane in a terminal; /budget snooze
 // <span> silences warnings and lets messages through. The reply is what the
 // command prints.
+// The details pane: where /budget answers in the terminal and the desktop app, and
+// what the desktop strip's Details link opens (beside the conversation there).
+export async function openDetails($: EngineInterface): Promise<void> {
+  await $.ui.open({ id: 'details', title: 'Weekly budget' })
+}
+
 export async function runBudgetCommand($: EngineInterface, args: string): Promise<string> {
   const text = args.trim().toLowerCase()
   if (text === '') {
-    if ((await $.session.surfaces()).some(s => s !== 'terminal')) {
+    if (hasPanelSurface(await $.session.surfaces())) {
       // The panel is how /budget answers here, so a store that cannot be read still
       // opens it, plainly titled and collapsed.
       const plain = { id: COMPACT, title: COMPACT_TITLE, rows: COLLAPSED_ROWS }
       await openCompact($, await currentCompactPane($).catch(() => plain))
       return 'Budget panel opened.'
     }
-    await $.ui.open({ id: 'details', title: 'Weekly budget' })
+    await openDetails($)
     return 'Budget details opened.'
   }
   if (text === 'snooze' || text.startsWith('snooze ')) {

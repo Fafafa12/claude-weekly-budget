@@ -2,7 +2,7 @@ import type { EngineInterface, RenderElement, RenderInput, ThemeKey } from 'clau
 
 import { DAY_NAMES, dayShares } from '../lib/config'
 import type { Config, Weekday } from '../lib/config'
-import { paneTitle, pct, stateLabel, textBar } from '../lib/format'
+import { paneTitle, pct, staleMark, stateLabel, textBar, todayText } from '../lib/format'
 import type { Budget, BudgetState } from '../lib/plan'
 import { MIN_LABEL_SHARE, barSegments, barSvg } from '../lib/svg'
 import type { Tz } from '../lib/tz'
@@ -26,7 +26,7 @@ export function planLine(cfg: Config): string {
 // text bar where it has not. The Svg's alt is the compact pane's title, "as of" mark included.
 export function renderBar(
   $: EngineInterface,
-  e: RenderInput<'Pane'>,
+  e: RenderInput<'Pane'> | RenderInput<'AbovePrompt'>,
   budget: Budget,
   { staleSince, tz, now }: { staleSince: number | null; tz: Tz; now: number },
 ): RenderElement {
@@ -89,6 +89,26 @@ export function renderStateLabel($: EngineInterface, e: RenderInput<'Pane'>, bud
   return (
     <Text color={STATE_COLORS[budget.state]} weight="semibold">
       {stateLabel(budget.state)}
+    </Text>
+  )
+}
+
+// The summary line the VS Code panel and the desktop strip both start with: what was
+// used and today's balance in the state's theme colour, the rest plain, an "as of"
+// mark dim; or that there is no reading yet.
+export function renderSummary(
+  $: EngineInterface,
+  e: RenderInput<'Pane'> | RenderInput<'AbovePrompt'>,
+  { budget, staleSince, tz, now }: { budget: Budget | null; staleSince: number | null; tz: Tz; now: number },
+): RenderElement {
+  const { Text } = $.ui.resolve(e)
+  if (budget === null) return <Text dimColor>{NO_READING_TEXT}</Text>
+  return (
+    <Text>
+      <Text color={STATE_COLORS[budget.state]}>{`${pct(budget.used)}%`}</Text>
+      <Text>{` of ${pct(budget.allowed)}% · `}</Text>
+      <Text color={STATE_COLORS[budget.state]}>{todayText(budget)}</Text>
+      {staleSince !== null && <Text dimColor>{staleMark(staleSince, tz, now)}</Text>}
     </Text>
   )
 }

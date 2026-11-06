@@ -4,6 +4,7 @@ import { ensureCompact, onMeasure, onPrompt, refreshQuietly, runBudgetCommand, s
 import { renderCompact } from './ui/compact'
 import { renderDetails } from './ui/details'
 import { renderSettings } from './ui/settings'
+import { renderStrip } from './ui/strip'
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -47,6 +48,9 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'Pane', requestId: 'compact' }, async ($, e) => renderCompact($, e))
+
+  // The desktop app's strip above the message box; other surfaces pass through.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => renderStrip($, e, next))
 
   on('ui.render', { component: 'Pane', requestId: 'details' }, async ($, e) => renderDetails($, e))
 

@@ -404,7 +404,7 @@ test('stays out of the terminal', async ($, on) => {
 })
 
 test('opens beside the terminal when another surface is attached too', async ($, on) => {
-  const { calls, clock } = engine(on, { surfaces: ['terminal', 'desktop'] })
+  const { calls, clock } = engine(on, { surfaces: ['terminal', 'vscode'] })
 
   await start($, clock)
 
@@ -754,4 +754,98 @@ test('the label widths are whole percentages that add up to 100, whatever the pl
   for (const width of widths) expect(width).toMatch(/^\d{1,3}%$/)
   expect(widths.reduce((sum, width) => sum + Number.parseInt(width, 10), 0)).toBe(100)
   await ui.unmount()
+})
+
+// The desktop app draws the bar as a strip above the message box, its AbovePrompt
+// band; the terminal (which has the status line) and VS Code (which has no band) don't.
+const STRIP = {
+  plugin: 'weekly-budget',
+  component: 'AbovePrompt',
+  props: {
+    hasSurvey: false,
+    isWorking: false,
+    maxRows: 10,
+    bodyColumns: 120,
+    scroll: { offset: 0, bodyRows: 10 },
+    view: {},
+  },
+} as const
+
+test('the desktop strip has the coloured summary, a Details link and the bar', async ($, on) => {
+  engine(on, { store: { config: pinned, lastReading: reading(33) } })
+  const ui = await $.ui.mount({ ...STRIP, surface: 'desktop' })
+
+  expect((await ui.find({ type: 'Text', text: /^33%$/ }))?.props.color).toBe('success')
+  expect((await ui.find({ type: 'Text', text: /^6% left today$/ }))?.props.color).toBe('success')
+  expect((await ui.find({ key: 'strip-details' }))?.props).toMatchObject({ label: '▸ Details', plain: true, dimColor: true })
+  expect(await ui.findAll({ type: 'Svg' })).toHaveLength(1)
+  expect((await ui.find({ type: 'Text', text: /^Fri$/ }))).toBeDefined()
+  await ui.unmount()
+})
+
+test("the strip's Details link opens the details in the side panel", async ($, on) => {
+  const { calls } = engine(on, { store: { config: pinned, lastReading: reading(33) }, surfaces: ['desktop'] })
+  const ui = await $.ui.mount({ ...STRIP, surface: 'desktop' })
+
+  await ui.press({ key: 'strip-details' })
+
+  expect(calls.opens).toEqual([{ id: 'details', title: 'Weekly budget' }])
+  await ui.unmount()
+})
+
+test('the strip with no reading says so, and still links to the details', async ($, on) => {
+  engine(on, { store: { config: pinned } })
+  const ui = await $.ui.mount({ ...STRIP, surface: 'desktop' })
+
+  expect(await ui.find({ type: 'Text', text: /No weekly reading yet/ })).toBeDefined()
+  expect(await ui.find({ key: 'strip-details' })).toBeDefined()
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  await ui.unmount()
+})
+
+for (const surface of ['terminal', 'vscode'] as const) {
+  test(`no strip on ${surface}`, async ($, on) => {
+    engine(on, { store: { config: pinned, lastReading: reading(33) } })
+    on('ui.render', ($, e) => {
+      const { Text } = $.ui.resolve(e)
+      return <Text>engine</Text>
+    })
+    const ui = await $.ui.mount({ ...STRIP, surface })
+
+    expect((await ui.find({ type: 'Text', text: /engine/ }))?.text).toBe('engine')
+    expect(await ui.find({ key: 'strip-details' })).toBeUndefined()
+    await ui.unmount()
+  })
+}
+
+test('the strip gives way to a survey', async ($, on) => {
+  engine(on, { store: { config: pinned, lastReading: reading(33) } })
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>survey</Text>
+  })
+  const ui = await $.ui.mount({ ...STRIP, surface: 'desktop', props: { ...STRIP.props, hasSurvey: true } })
+
+  expect(await ui.find({ key: 'strip-details' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /survey/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('on the desktop no panel opens by itself: the strip is there instead', async ($, on) => {
+  const { calls, clock } = engine(on, { store: { config: pinned, lastReading: reading(33) }, surfaces: ['desktop'] })
+
+  await start($, clock, 'desktop')
+  await $.session.attach({ clientId: 'desktop-1', surface: 'desktop' })
+  await clock.settle()
+
+  expect(calls.opens).toEqual([])
+})
+
+test('/budget on the desktop opens the details in the side panel', async ($, on) => {
+  const { calls } = engine(on, { store: { config: pinned, lastReading: reading(33) }, surfaces: ['desktop'] })
+
+  const result = await run($, 'budget')
+
+  expect(result.text).toBe('Budget details opened.')
+  expect(calls.opens).toEqual([{ id: 'details', title: 'Weekly budget' }])
 })

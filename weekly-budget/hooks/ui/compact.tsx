@@ -1,9 +1,8 @@
 import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 
 import { currentBudget, getDetailsExpanded, toggleDetails } from '../controller'
-import { pct, staleMark, todayText } from '../lib/format'
 import { renderDetailsBody } from './details-body'
-import { NO_READING_TEXT, renderBar, STATE_COLORS } from './shared'
+import { renderBar, renderSummary } from './shared'
 
 // The body of VS Code's one panel. The host draws the header in plain text, so the
 // summary is the first line here instead: what was used and today's balance in the
@@ -16,22 +15,10 @@ export async function renderCompact($: EngineInterface, e: RenderInput<'Pane'>):
   const { budget, staleSince, cfg, tz, now } = view
   const isCompact = cfg.showCompactPanel
 
-  const summary =
-    budget === null ? (
-      <Text dimColor>{NO_READING_TEXT}</Text>
-    ) : (
-      <Text>
-        <Text color={STATE_COLORS[budget.state]}>{`${pct(budget.used)}%`}</Text>
-        <Text>{` of ${pct(budget.allowed)}% · `}</Text>
-        <Text color={STATE_COLORS[budget.state]}>{todayText(budget)}</Text>
-        {staleSince !== null && <Text dimColor>{staleMark(staleSince, tz, now)}</Text>}
-      </Text>
-    )
-
   return (
     <Box flexDirection="column" gap={1}>
       <Box flexDirection="row" justifyContent="space-between" alignItems="center" gap={2}>
-        {summary}
+        {renderSummary($, e, view)}
         {isCompact && (
           <Button
             key="details-toggle"
