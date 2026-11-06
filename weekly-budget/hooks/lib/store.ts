@@ -4,6 +4,8 @@ import { normalizeConfig } from './config'
 import type { Config } from './config'
 import { accountLabel } from './account'
 import type { Account } from './account'
+import { addSample } from './forecast'
+import type { Sample } from './forecast'
 import type { DayStart, Reading } from './plan'
 import type { Ledger } from './warnings'
 
@@ -146,8 +148,9 @@ export function labelForSlot(accounts: Readonly<Record<string, StoredAccount>>, 
 // Every account on this machine has its own weekly limit, and no session can tell
 // which account another is signed in to, but each week resets at its own time. So
 // the store keeps a record per week (an account's week), told apart by its reset time:
-// the best reading of it, what today began with, and today's warnings.
-export type WeekEntry = { reading: Reading; dayStart: DayStart | null; ledger: Ledger | null }
+// the best reading of it, what today began with, today's warnings, and how its figure
+// rose over the last two hours (for the pace).
+export type WeekEntry = { reading: Reading; dayStart: DayStart | null; ledger: Ledger | null; samples: Sample[] }
 
 const readingOf = (v: unknown): Reading | null =>
   isRecord(v) && isNum(v.percentUsed) && isNum(v.resetsMs) && isNum(v.at)
@@ -158,6 +161,11 @@ const dayStartOf = (v: unknown, weekKey: number): DayStart | null =>
   isRecord(v) && v.weekKey === weekKey && typeof v.dayKey === 'string' && isNum(v.percentUsed)
     ? { weekKey, dayKey: v.dayKey, percentUsed: v.percentUsed }
     : null
+
+const samplesOf = (v: unknown): Sample[] =>
+  Array.isArray(v)
+    ? v.flatMap(x => (isRecord(x) && isNum(x.at) && isNum(x.percentUsed) ? [{ at: x.at, percentUsed: x.percentUsed }] : []))
+    : []
 
 const ledgerOf = (v: unknown, weekKey: number): Ledger | null =>
   isRecord(v) && v.weekKey === weekKey && isStrOrNull(v.headsUpDay) && isStrOrNull(v.overDay)
@@ -173,7 +181,14 @@ export async function loadWeeks($: EngineInterface): Promise<WeekEntry[]> {
     return stored.flatMap(v => {
       const reading = isRecord(v) ? readingOf(v.reading) : null
       if (reading === null || !isRecord(v)) return []
-      return [{ reading, dayStart: dayStartOf(v.dayStart, reading.resetsMs), ledger: ledgerOf(v.ledger, reading.resetsMs) }]
+      return [
+        {
+          reading,
+          dayStart: dayStartOf(v.dayStart, reading.resetsMs),
+          ledger: ledgerOf(v.ledger, reading.resetsMs),
+          samples: samplesOf(v.samples),
+        },
+      ]
     })
   }
   const [reading, dayStart, ledger] = await Promise.all([
@@ -183,7 +198,7 @@ export async function loadWeeks($: EngineInterface): Promise<WeekEntry[]> {
   ])
   const old = readingOf(reading)
   if (old === null) return []
-  return [{ reading: old, dayStart: dayStartOf(dayStart, old.resetsMs), ledger: ledgerOf(ledger, old.resetsMs) }]
+  return [{ reading: old, dayStart: dayStartOf(dayStart, old.resetsMs), ledger: ledgerOf(ledger, old.resetsMs), samples: [] }]
 }
 
 // Re-reads (other sessions write too), changes one week, drops the weeks that are
@@ -209,12 +224,14 @@ async function changeWeek(
 const isBetterInWeek = (r: Reading, than: Reading): boolean =>
   r.percentUsed !== than.percentUsed ? r.percentUsed > than.percentUsed : r.at > than.at
 
-// Keeps a reading of a week still running, when it is the better bound in its week.
+// Keeps a reading of a week still running, when it is the better bound in its week,
+// and as a sample when its figure rose.
 export async function saveWeekReading($: EngineInterface, r: Reading, now: number): Promise<void> {
   if (r.resetsMs <= now) return
   await changeWeek($, r.resetsMs, now, week => {
-    if (week === undefined) return { reading: r, dayStart: null, ledger: null }
-    return isBetterInWeek(r, week.reading) ? { ...week, reading: r } : week
+    if (week === undefined) return { reading: r, dayStart: null, ledger: null, samples: addSample([], r, now) }
+    const samples = addSample(week.samples, r, now)
+    return isBetterInWeek(r, week.reading) ? { ...week, reading: r, samples } : { ...week, samples }
   })
 }
 

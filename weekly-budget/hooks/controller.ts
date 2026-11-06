@@ -5,6 +5,8 @@ import { OAUTH_HEADERS, parseProfile, parseUsageApi, PROFILE_URL, USAGE_URL } fr
 import type { Account } from './lib/account'
 import { accountSlot, pickConfig, validatePins } from './lib/config'
 import type { Config } from './lib/config'
+import { todayForecast, todayPaceLine, weekForecast, weekPaceLine } from './lib/forecast'
+import type { PaceLine } from './lib/forecast'
 import { budgetReply, staleMark, statusLine } from './lib/format'
 import { computeBudget, nextDayStart, readingFrom, usageAtDayStart } from './lib/plan'
 import { matchWeek, PROBE_ARGV, PROBE_ENV, parseUsageWeek, probedReading, shouldProbe } from './lib/probe'
@@ -31,6 +33,7 @@ import {
   saveWeekLedger,
   saveWeekReading,
 } from './lib/store'
+import type { WeekEntry } from './lib/store'
 import { fixedOffsetTz, systemTz } from './lib/tz'
 import type { Tz } from './lib/tz'
 import { dependsOnSurface, gatePrompt, isGated, measureToast, parseSnooze, toastText } from './lib/warnings'
@@ -117,7 +120,24 @@ async function loadView($: EngineInterface) {
     reading === null
       ? null
       : computeBudget(reading, cfg, now, tz, usageAtDayStart(reading, entry?.dayStart ?? null, now, tz))
-  return { now, tz, cfg, snoozedUntil, reading, staleSince, budget, accountWeek, label }
+  return { now, tz, cfg, snoozedUntil, reading, staleSince, budget, accountWeek, label, pace: paceOf(budget, entry, now, tz) }
+}
+
+// Where the pace leads, in words (lib/forecast.ts): today's from the week's last two
+// hours of rises, the week's from its average; null for one there is none of.
+function paceOf(
+  budget: Budget | null,
+  entry: WeekEntry | null,
+  now: number,
+  tz: Tz,
+): { today: PaceLine | null; week: PaceLine | null } | null {
+  if (budget === null) return null
+  const today = todayForecast(budget, entry?.samples ?? [], now, tz)
+  const week = weekForecast(budget, now)
+  return {
+    today: today === null ? null : todayPaceLine(today, tz),
+    week: week === null ? null : weekPaceLine(week, tz, now),
+  }
 }
 
 // The settings a chat shows and changes: its account's, and which account that is
@@ -140,9 +160,10 @@ export async function currentBudget($: EngineInterface): Promise<{
   tz: Tz
   now: number
   label: string | null
+  pace: { today: PaceLine | null; week: PaceLine | null } | null
 }> {
-  const { budget, staleSince, cfg, snoozedUntil, tz, now, label } = await loadView($)
-  return { budget, staleSince, cfg, snoozedUntil, tz, now, label }
+  const { budget, staleSince, cfg, snoozedUntil, tz, now, label, pace } = await loadView($)
+  return { budget, staleSince, cfg, snoozedUntil, tz, now, label, pace }
 }
 
 // Brings the status line and the drawn panes up to the store.

@@ -33,13 +33,13 @@ export type Budget = {
   weekStartMs: number
 }
 
-// The weekly reading out of what the session reports, or null when there is none.
 // A week's key: its reset to the nearest minute. Replies and Anthropic's usage address
 // report one reset a moment apart (20:00:00, 19:59:59.7), which must name one week.
 export function weekKey(resetsMs: number): number {
   return Math.round(resetsMs / 60_000) * 60_000
 }
 
+// The weekly reading out of what the session reports, or null when there is none.
 export function readingFrom(
   rateLimits: readonly { kind: string; percentUsed: number; resetsAt?: string }[],
   at: number,

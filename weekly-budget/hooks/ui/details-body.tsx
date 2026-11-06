@@ -4,6 +4,7 @@ import { applySnooze, resolveTz } from '../controller'
 import type { currentBudget } from '../controller'
 import { DAY_NAMES } from '../lib/config'
 import type { Config } from '../lib/config'
+import type { PaceLine } from '../lib/forecast'
 import { asOf, countdown, pct, todayText } from '../lib/format'
 import { planLine, STATE_COLORS } from './shared'
 
@@ -31,15 +32,28 @@ async function snoozeFor($: EngineInterface, span: Span): Promise<void> {
   await applySnooze($, span === null ? null : span === 'today' ? tz.midnightAfter(now) : now + span * MIN_MS)
 }
 
+// "Pace today: 2% an hour → today's share runs out around 18:00", the outcome in
+// the colour it calls for; a line with no pace to tell, dim.
+function renderPace($: EngineInterface, e: RenderInput<'Pane'>, name: string, line: PaceLine): RenderElement {
+  const { Text } = $.ui.resolve(e)
+  if (line.outcome === null) return <Text dimColor>{`${name}: ${line.lead}`}</Text>
+  return (
+    <Text>
+      <Text>{`${name}: ${line.lead} → `}</Text>
+      <Text color={line.tone ?? undefined}>{line.outcome}</Text>
+    </Text>
+  )
+}
+
 // The details of the weekly budget, which the details pane and the VS Code panel
 // both show under the bar: the numbers (marked last known when the reading is
-// stale), when the week resets, the plan, the mode, and the snooze with its
-// buttons. The plan, the mode and the snooze come from the config and the store,
+// stale), where the pace leads, when the week resets, the plan, the mode, and the
+// snooze with its buttons. The plan, the mode and the snooze come from the config and the store,
 // so they show with no reading too.
 export function renderDetailsBody(
   $: EngineInterface,
   e: RenderInput<'Pane'>,
-  { budget, staleSince, cfg, snoozedUntil, tz, now, label }: BudgetView,
+  { budget, staleSince, cfg, snoozedUntil, tz, now, label, pace }: BudgetView,
 ): RenderElement {
   const { Box, Button, Text } = $.ui.resolve(e)
   const isSnoozed = snoozedUntil !== null && snoozedUntil > now
@@ -53,6 +67,12 @@ export function renderDetailsBody(
           <Text>{`Used ${pct(budget.used)}%`}</Text>
           <Text>{`Allowed by tonight ${pct(budget.allowed)}%`}</Text>
           {budget.state !== 'limit' && <Text color={STATE_COLORS[budget.state]}>{todayText(budget)}</Text>}
+        </Box>
+      )}
+      {pace !== null && (pace.today !== null || pace.week !== null) && (
+        <Box flexDirection="column">
+          {pace.today !== null && renderPace($, e, 'Pace today', pace.today)}
+          {pace.week !== null && renderPace($, e, 'Pace week', pace.week)}
         </Box>
       )}
       {budget !== null && (

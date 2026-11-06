@@ -404,3 +404,58 @@ for (const surface of SURFACES) {
     await ui.unmount()
   })
 }
+
+// Today's pace from the week's last two hours of rises, the week's from its average.
+const risen = (samples: { ago: number; percentUsed: number }[]) => ({
+  config: pinned,
+  weeks: [
+    {
+      reading: reading(33),
+      dayStart: null,
+      ledger: null,
+      samples: samples.map(x => ({ at: now - x.ago, percentUsed: x.percentUsed })),
+    },
+  ],
+})
+
+test("the details show today's pace and the week's, the outcome coloured", async ($, on) => {
+  engine(on, {
+    store: risen([
+      { ago: 2 * HOUR_MS, percentUsed: 29 },
+      { ago: HOUR_MS, percentUsed: 31 },
+      { ago: 0, percentUsed: 33 },
+    ]),
+  })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  // 2% an hour from 15:00 spends the 6% left by 18:00.
+  expect((await ui.find({ type: 'Text', text: /^Pace today/ }))?.text).toBe(
+    "Pace today: 2% an hour → today's share runs out around 18:00",
+  )
+  expect((await ui.find({ type: 'Text', text: /^today's share runs out/ }))?.props.color).toBe('warning')
+  // 33% in the 1 day 19 hours since Tue 20:00 is 18.4% a day: 100% by Mon 06:15.
+  expect((await ui.find({ type: 'Text', text: /^Pace week/ }))?.text).toBe(
+    'Pace week: 18.4% a day → the limit is reached Mon around 06:15',
+  )
+  await ui.unmount()
+})
+
+test('with no rises read yet, today has no pace to tell', async ($, on) => {
+  engine(on)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  expect((await ui.find({ type: 'Text', text: /^Pace today/ }))?.text).toBe('Pace today: not enough readings yet')
+  await ui.unmount()
+})
+
+test('over today, only the week has a pace', async ($, on) => {
+  engine(on, { store: { config: pinned, lastReading: reading(43) } })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  expect(await ui.find({ type: 'Text', text: /^Pace today/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^Pace week/ })).toBeDefined()
+  await ui.unmount()
+})

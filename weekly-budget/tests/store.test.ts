@@ -119,11 +119,13 @@ test("a week's start of day and warning record are its own", async () => {
     reading: at(49, team),
     dayStart: { weekKey: team, dayKey: '2026-11-05', percentUsed: 45 },
     ledger: null,
+    samples: [{ at: now, percentUsed: 49 }],
   })
   expect(weeks.find(w => w.reading.resetsMs === pro)).toEqual({
     reading: at(3, pro),
     dayStart: null,
     ledger: { weekKey: pro, headsUpDay: null, overDay: '2026-11-05' },
+    samples: [{ at: now, percentUsed: 3 }],
   })
   // A week no reading has told of yet keeps nothing.
   await saveWeekDayStart($, { weekKey: now + DAY_MS, dayKey: '2026-11-05', percentUsed: 1 })
@@ -141,6 +143,7 @@ test("an older version's single reading, start of day and record become one week
       reading: at(49, team),
       dayStart: { weekKey: team, dayKey: '2026-11-05', percentUsed: 45 },
       ledger: { weekKey: team, headsUpDay: '2026-11-05', overDay: null },
+      samples: [],
     },
   ])
   // Records of another week than the reading's are not carried over.
@@ -151,8 +154,22 @@ test("an older version's single reading, start of day and record become one week
 test('malformed weeks are none', async () => {
   expect(await loadWeeks(fakeEngine({ weeks: 'x' }))).toEqual([])
   expect(await loadWeeks(fakeEngine({ weeks: [{ reading: { percentUsed: 'a' } }, { reading: at(3, pro) }] }))).toEqual([
-    { reading: at(3, pro), dayStart: null, ledger: null },
+    { reading: at(3, pro), dayStart: null, ledger: null, samples: [] },
   ])
+})
+
+test("a week keeps its figure's rises, for the pace", async () => {
+  const $ = fakeEngine()
+  await saveWeekReading($, at(10, team, now - 30 * MIN_MS), now - 30 * MIN_MS)
+  await saveWeekReading($, at(10, team, now - 20 * MIN_MS), now - 20 * MIN_MS)
+  await saveWeekReading($, at(12, team), now)
+  expect((await loadWeeks($))[0]?.samples).toEqual([
+    { at: now - 30 * MIN_MS, percentUsed: 10 },
+    { at: now, percentUsed: 12 },
+  ])
+  // Samples that are not the shape expected are left out.
+  const odd = fakeEngine({ weeks: [{ reading: at(3, pro), samples: [{ at: 'x' }, { at: now, percentUsed: 3 }] }] })
+  expect((await loadWeeks(odd))[0]?.samples).toEqual([{ at: now, percentUsed: 3 }])
 })
 
 test('the week each surface last saw round-trips', async () => {
@@ -163,7 +180,7 @@ test('the week each surface last saw round-trips', async () => {
   expect(await loadSurfaceWeeks($)).toEqual({ desktop: pro, terminal: team })
 })
 
-const weekOf = (reading: ReturnType<typeof at>) => ({ reading, dayStart: null, ledger: null })
+const weekOf = (reading: ReturnType<typeof at>) => ({ reading, dayStart: null, ledger: null, samples: [] })
 
 test("pickWeek shows the session's own week, the better of its own and the stored reading", async () => {
   const weeks = [weekOf(at(49, team)), weekOf(at(3, pro, now - MIN_MS))]
