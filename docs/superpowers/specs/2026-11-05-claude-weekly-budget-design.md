@@ -243,7 +243,7 @@ Screenshots of the spike panel were reviewed in the conversation.
 
 The reading reflects the state after the last response. That means block decides on the next message using the highest reading in the current week, and that is acceptable.
 
-### Rulings made during the build (R19–R26)
+### Rulings made during the build (R19–R27)
 
 - **R19:** only a prompt a person can be behind is gated (block or re-warn): an absent origin, or `composer`, `bridge`, `slack-ping`, `sdk` or `unclassified`; not `isMeta`; not a `/budget…` command; and not one delivered into a running turn. Every agent and automation kind passes.
 - **R20:** the stale mark is ` · as of HH:MM` for a reading from today, and ` · as of Tue HH:MM` (a three-letter weekday) for one from an earlier day. The status line and the panel title both use it.
@@ -253,6 +253,7 @@ The reading reflects the state after the last response. That means block decides
 - **R24 (refines R21):** a prompt with `turnId` set and `wait === true` is queued to run as the next turn, so it is "the next message" and is gated like any other. A plain mid-turn message passes.
 - **R25:** a week's key is its reset rounded to the nearest minute, wherever the reading comes from. A reply gives `20:00:00` and Anthropic's usage address `19:59:59.7` for the same week; without rounding they were two weeks, two slots and two settings entries.
 - **R26:** a chat the SDK drives (the desktop app's) starts with `surface: null` and `isInteractive: false`. The first `session.attach` records its surface and makes it a chat someone drives, which probes then and names the account. A chat that was already interactive fetches nothing more on attach.
+- **R27:** the details carry a pace forecast. Today's pace is the rise over the last 2 hours (each week keeps the rises of its figure in that window, and the one before it), turned into when today's share runs out, to the quarter hour; with less than half an hour read, "not enough readings yet"; over today, no line. The week's pace is its average per day so far, carried to the reset, after the first 12 hours. Neither warns.
 
 ## 9. State and storage
 
