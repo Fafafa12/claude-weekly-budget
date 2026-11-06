@@ -9,6 +9,7 @@ import {
   refreshQuietly,
   runBudgetCommand,
   setInteractive,
+  setSurface,
   showToast,
   tickQuietly,
 } from './controller'
@@ -28,6 +29,7 @@ export const register: Register = on => {
       description: 'Set your weekly Claude budget plan and warnings',
     })
     await setInteractive($, e.isInteractive)
+    await setSurface($, e.surface)
     $.clock.every(60_000, () => void tickQuietly($))
     void refreshQuietly($)
     void ensureCompact($).catch(() => {})

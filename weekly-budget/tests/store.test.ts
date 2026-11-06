@@ -4,14 +4,16 @@ import { expect, test } from 'claude-code/testing'
 import { DEFAULT_CONFIG } from '../hooks/lib/config'
 import {
   loadConfig,
-  loadLedger,
-  loadSharedReading,
   loadSnooze,
-  pickReading,
+  loadSurfaceWeeks,
+  loadWeeks,
+  pickWeek,
   saveConfig,
-  saveLedger,
-  saveSharedReading,
   saveSnooze,
+  saveSurfaceWeek,
+  saveWeekDayStart,
+  saveWeekLedger,
+  saveWeekReading,
   STALE_MS,
 } from '../hooks/lib/store'
 
@@ -67,117 +69,116 @@ test('snooze round-trips and clears', async () => {
   expect(await loadSnooze($)).toBeNull()
 })
 
-test('ledger round-trips, and a malformed one is null', async () => {
+// Two accounts on one machine each have their own week, told apart by when it resets:
+// "team" resets in 5 days, "pro" in 2.
+const team = reset
+const pro = now + 2 * DAY_MS
+const at = (percentUsed: number, resetsMs: number, when = now) => ({ percentUsed, resetsMs, at: when })
+const readingsOf = async ($: EngineInterface) => (await loadWeeks($)).map(w => w.reading)
+
+test('saveWeekReading keeps the higher figure in a week, then the later', async () => {
   const $ = fakeEngine()
-  expect(await loadLedger($)).toBeNull()
-  const ledger = { weekKey: reset, headsUpDay: '2026-11-05', overDay: null }
-  await saveLedger($, ledger)
-  expect(await loadLedger($)).toEqual(ledger)
-
-  const bad = fakeEngine({ ledger: { weekKey: 'x', headsUpDay: 3, overDay: null } })
-  expect(await loadLedger(bad)).toBeNull()
+  await saveWeekReading($, at(10, team), now)
+  await saveWeekReading($, at(9, team, now + MIN_MS), now)
+  expect(await readingsOf($)).toEqual([at(10, team)])
+  await saveWeekReading($, at(10, team, now + MIN_MS), now)
+  expect(await readingsOf($)).toEqual([at(10, team, now + MIN_MS)])
+  await saveWeekReading($, at(12, team, now - MIN_MS), now)
+  expect(await readingsOf($)).toEqual([at(12, team, now - MIN_MS)])
 })
 
-test('a malformed shared reading is null', async () => {
-  const $ = fakeEngine({ lastReading: { percentUsed: '40', resetsMs: reset, at: now } })
-  expect(await loadSharedReading($)).toBeNull()
-})
-
-// Usage only goes up within a window, so the better bound is the higher figure,
-// and between equal ones the later reading. A later window beats an earlier one.
-test('saveSharedReading keeps the higher figure in a window, then the later', async () => {
+test("saveWeekReading keeps each account's week apart", async () => {
   const $ = fakeEngine()
-  const first = { percentUsed: 10, resetsMs: reset, at: now - 3 * MIN_MS }
-  await saveSharedReading($, first, now)
-  await saveSharedReading($, { percentUsed: 9, resetsMs: reset, at: now - MIN_MS }, now)
-  expect(await loadSharedReading($)).toEqual(first)
-
-  const same = { ...first, at: now - 2 * MIN_MS }
-  await saveSharedReading($, same, now)
-  expect(await loadSharedReading($)).toEqual(same)
-  await saveSharedReading($, first, now)
-  expect(await loadSharedReading($)).toEqual(same)
-
-  const higher = { percentUsed: 12, resetsMs: reset, at: now - 5 * MIN_MS }
-  await saveSharedReading($, higher, now)
-  expect(await loadSharedReading($)).toEqual(higher)
+  await saveWeekReading($, at(49, team), now)
+  await saveWeekReading($, at(3, pro), now)
+  expect(await readingsOf($)).toEqual([at(49, team), at(3, pro)])
 })
 
-test('saveSharedReading keeps the later window, whatever its figure or time', async () => {
+test('saveWeekReading never keeps a week that is over, and drops the ones that end', async () => {
   const $ = fakeEngine()
-  const next = { percentUsed: 1, resetsMs: reset + 7 * DAY_MS, at: now - 5 * MIN_MS }
-  await saveSharedReading($, { percentUsed: 90, resetsMs: reset, at: now - MIN_MS }, now)
-  await saveSharedReading($, next, now)
-  expect(await loadSharedReading($)).toEqual(next)
-
-  // An earlier window never comes back over it.
-  await saveSharedReading($, { percentUsed: 95, resetsMs: reset, at: now }, now)
-  expect(await loadSharedReading($)).toEqual(next)
+  await saveWeekReading($, at(30, now), now)
+  expect(await readingsOf($)).toEqual([])
+  await saveWeekReading($, at(30, now + MIN_MS), now)
+  await saveWeekReading($, at(10, team), now + 2 * MIN_MS)
+  expect(await readingsOf($)).toEqual([at(10, team)])
 })
 
-test('saveSharedReading never stores a reading whose window is over', async () => {
+test("a week's start of day and warning record are its own", async () => {
   const $ = fakeEngine()
-  // The reset instant itself is already the next window.
-  await saveSharedReading($, { percentUsed: 30, resetsMs: now, at: now - MIN_MS }, now)
-  expect(await loadSharedReading($)).toBeNull()
-
-  const live = { percentUsed: 30, resetsMs: reset, at: now - MIN_MS }
-  await saveSharedReading($, live, now)
-  await saveSharedReading($, { percentUsed: 90, resetsMs: now - 1, at: now }, now)
-  expect(await loadSharedReading($)).toEqual(live)
+  await saveWeekReading($, at(49, team), now)
+  await saveWeekReading($, at(3, pro), now)
+  await saveWeekDayStart($, { weekKey: team, dayKey: '2026-11-05', percentUsed: 45 })
+  await saveWeekLedger($, { weekKey: pro, headsUpDay: null, overDay: '2026-11-05' })
+  const weeks = await loadWeeks($)
+  expect(weeks.find(w => w.reading.resetsMs === team)).toEqual({
+    reading: at(49, team),
+    dayStart: { weekKey: team, dayKey: '2026-11-05', percentUsed: 45 },
+    ledger: null,
+  })
+  expect(weeks.find(w => w.reading.resetsMs === pro)).toEqual({
+    reading: at(3, pro),
+    dayStart: null,
+    ledger: { weekKey: pro, headsUpDay: null, overDay: '2026-11-05' },
+  })
+  // A week no reading has told of yet keeps nothing.
+  await saveWeekDayStart($, { weekKey: now + DAY_MS, dayKey: '2026-11-05', percentUsed: 1 })
+  expect(await loadWeeks($)).toHaveLength(2)
 })
 
-test('saveSharedReading replaces a stored reading whose window is over', async () => {
-  const $ = fakeEngine({ lastReading: { percentUsed: 99, resetsMs: now - DAY_MS, at: now - 2 * DAY_MS } })
-  const live = { percentUsed: 3, resetsMs: reset, at: now }
-  await saveSharedReading($, live, now)
-  expect(await loadSharedReading($)).toEqual(live)
+test("an older version's single reading, start of day and record become one week", async () => {
+  const $ = fakeEngine({
+    lastReading: at(49, team),
+    dayStart: { weekKey: team, dayKey: '2026-11-05', percentUsed: 45 },
+    ledger: { weekKey: team, headsUpDay: '2026-11-05', overDay: null },
+  })
+  expect(await loadWeeks($)).toEqual([
+    {
+      reading: at(49, team),
+      dayStart: { weekKey: team, dayKey: '2026-11-05', percentUsed: 45 },
+      ledger: { weekKey: team, headsUpDay: '2026-11-05', overDay: null },
+    },
+  ])
+  // Records of another week than the reading's are not carried over.
+  const mixed = fakeEngine({ lastReading: at(49, team), dayStart: { weekKey: pro, dayKey: '2026-11-05', percentUsed: 1 } })
+  expect((await loadWeeks(mixed))[0]?.dayStart).toBeNull()
 })
 
-test('pickReading drops a session reading from an expired window', () => {
-  const session = { percentUsed: 30, resetsMs: now - 1, at: now - 5 * MIN_MS }
-  expect(pickReading(session, null, now)).toEqual({ reading: null, staleSince: null })
-  // The reset instant itself is already the next window.
-  expect(pickReading({ ...session, resetsMs: now }, null, now).reading).toBeNull()
+test('malformed weeks are none', async () => {
+  expect(await loadWeeks(fakeEngine({ weeks: 'x' }))).toEqual([])
+  expect(await loadWeeks(fakeEngine({ weeks: [{ reading: { percentUsed: 'a' } }, { reading: at(3, pro) }] }))).toEqual([
+    { reading: at(3, pro), dayStart: null, ledger: null },
+  ])
 })
 
-test('pickReading marks a shared reading older than STALE_MS stale', () => {
-  const shared = { percentUsed: 30, resetsMs: reset, at: now - 20 * MIN_MS }
-  expect(pickReading(null, shared, now)).toEqual({ reading: shared, staleSince: shared.at })
+test('the week each surface last saw round-trips', async () => {
+  const $ = fakeEngine()
+  expect(await loadSurfaceWeeks($)).toEqual({})
+  await saveSurfaceWeek($, 'desktop', pro)
+  await saveSurfaceWeek($, 'terminal', team)
+  expect(await loadSurfaceWeeks($)).toEqual({ desktop: pro, terminal: team })
 })
 
-test('pickReading is not stale at exactly STALE_MS', () => {
-  const shared = { percentUsed: 30, resetsMs: reset, at: now - STALE_MS }
-  expect(pickReading(null, shared, now)).toEqual({ reading: shared, staleSince: null })
+const weekOf = (reading: ReturnType<typeof at>) => ({ reading, dayStart: null, ledger: null })
+
+test("pickWeek shows the session's own week, the better of its own and the stored reading", async () => {
+  const weeks = [weekOf(at(49, team)), weekOf(at(3, pro, now - MIN_MS))]
+  expect(pickWeek(at(2, pro), weeks, team, now).reading).toEqual(at(3, pro, now - MIN_MS))
+  expect(pickWeek(at(4, pro), weeks, team, now).reading).toEqual(at(4, pro))
+  expect(pickWeek(at(4, pro), weeks, team, now).entry).toEqual(weeks[1])
 })
 
-test('pickReading takes the higher figure in the same window, even when it is older', () => {
-  const t = now - 60e3
-  const session = { percentUsed: 30, resetsMs: reset, at: t + 1 }
-  const shared = { percentUsed: 31, resetsMs: reset, at: t }
-  expect(pickReading(session, shared, now)).toEqual({ reading: shared, staleSince: null })
-  expect(pickReading(shared, session, now).reading).toEqual(shared)
+test('pickWeek without a reading of its own shows the week its surface last saw, else the latest', async () => {
+  const weeks = [weekOf(at(49, team, now - 30 * MIN_MS)), weekOf(at(3, pro, now - MIN_MS))]
+  expect(pickWeek(null, weeks, team, now).reading).toEqual(at(49, team, now - 30 * MIN_MS))
+  expect(pickWeek(null, weeks, null, now).reading).toEqual(at(3, pro, now - MIN_MS))
+  // A remembered week that is over, or unknown, is no guide.
+  expect(pickWeek(null, weeks, now - 1, now).reading).toEqual(at(3, pro, now - MIN_MS))
 })
 
-test('pickReading takes the later of two equal figures in the same window', () => {
-  const session = { percentUsed: 30, resetsMs: reset, at: now - 20 * MIN_MS }
-  const shared = { percentUsed: 30, resetsMs: reset, at: now - MIN_MS }
-  expect(pickReading(session, shared, now)).toEqual({ reading: shared, staleSince: null })
-  expect(pickReading(shared, session, now).reading).toEqual(shared)
-})
-
-test('pickReading takes the new window over the previous one', () => {
-  const shared = { percentUsed: 90, resetsMs: now + 60 * MIN_MS, at: now - 60e3 }
-  const session = { percentUsed: 2, resetsMs: now + 60 * MIN_MS + 7 * DAY_MS, at: now - 120e3 }
-  expect(pickReading(session, shared, now).reading).toEqual(session)
-})
-
-test('pickReading skips an expired reading even when it is newer', () => {
-  const live = { percentUsed: 40, resetsMs: reset, at: now - 10 * MIN_MS }
-  const expired = { percentUsed: 5, resetsMs: now - 1, at: now - 60e3 }
-  expect(pickReading(expired, live, now).reading).toEqual(live)
-})
-
-test('pickReading with no readings is empty', () => {
-  expect(pickReading(null, null, now)).toEqual({ reading: null, staleSince: null })
+test('pickWeek ignores weeks that are over, and marks an old reading stale', async () => {
+  expect(pickWeek(at(5, now), [weekOf(at(6, now))], null, now)).toEqual({ entry: null, reading: null, staleSince: null })
+  const old = at(49, team, now - STALE_MS - 1)
+  expect(pickWeek(null, [weekOf(old)], null, now).staleSince).toBe(old.at)
+  expect(pickWeek(null, [weekOf(at(49, team, now - STALE_MS))], null, now).staleSince).toBeNull()
+  expect(pickWeek(null, [], null, now)).toEqual({ entry: null, reading: null, staleSince: null })
 })

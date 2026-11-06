@@ -5,24 +5,24 @@ import { validatePins } from './lib/config'
 import type { Config } from './lib/config'
 import { staleMark, statusLine } from './lib/format'
 import { computeBudget, nextDayStart, readingFrom, usageAtDayStart } from './lib/plan'
-import { PROBE_ARGV, PROBE_ENV, parseUsageWeek, probedReading, shouldProbe } from './lib/probe'
+import { matchWeek, PROBE_ARGV, PROBE_ENV, parseUsageWeek, probedReading, shouldProbe } from './lib/probe'
 import type { Budget, Reading } from './lib/plan'
 import {
   STALE_MS,
   loadConfig,
   loadConfigVersion,
-  loadDayStart,
-  loadLedger,
   loadProbeAt,
-  loadSharedReading,
   loadSnooze,
-  pickReading,
+  loadSurfaceWeeks,
+  loadWeeks,
+  pickWeek,
   saveConfig,
-  saveDayStart,
-  saveLedger,
   saveProbeAt,
-  saveSharedReading,
   saveSnooze,
+  saveSurfaceWeek,
+  saveWeekDayStart,
+  saveWeekLedger,
+  saveWeekReading,
 } from './lib/store'
 import { fixedOffsetTz, systemTz } from './lib/tz'
 import type { Tz } from './lib/tz'
@@ -41,6 +41,7 @@ export const detailsExpandedAtom = atom({ plugin: 'weekly-budget', key: 'details
 export const compactRowsAtom = atom({ plugin: 'weekly-budget', key: 'compactRows' } as const, null)
 export const stripHiddenAtom = atom({ plugin: 'weekly-budget', key: 'stripHidden' } as const, false)
 export const interactiveAtom = atom({ plugin: 'weekly-budget', key: 'interactive' } as const, false)
+export const surfaceAtom = atom({ plugin: 'weekly-budget', key: 'surface' } as const, null)
 
 // VS Code's one panel. Its height is what it is asked for, in rows: the bar and the
 // toggle row while the compact view is collapsed, the bar with the details otherwise.
@@ -83,23 +84,28 @@ export async function resolveTz($: EngineInterface): Promise<Tz> {
 
 // The store read into everything a decision or a display needs, at one `now`.
 async function loadView($: EngineInterface) {
-  const [now, tz, cfg, snoozedUntil, own, shared, dayStart] = await Promise.all([
+  const [now, tz, cfg, snoozedUntil, own, weeks, surfaceWeeks, surface] = await Promise.all([
     $.clock.now(),
     resolveTz($),
     loadConfig($),
     loadSnooze($),
     read($, readingAtom),
-    loadSharedReading($),
-    loadDayStart($),
+    loadWeeks($),
+    loadSurfaceWeeks($),
+    read($, surfaceAtom),
   ])
-  const { reading, staleSince } = pickReading(own, shared, now)
+  // This chat's account's week: its own replies say which; before the first, the one
+  // its surface last saw, else the one read last (pickWeek).
+  const { entry, reading, staleSince } = pickWeek(own, weeks, surface === null ? null : (surfaceWeeks[surface] ?? null), now)
   const budget =
-    reading === null ? null : computeBudget(reading, cfg, now, tz, usageAtDayStart(reading, dayStart, now, tz))
+    reading === null
+      ? null
+      : computeBudget(reading, cfg, now, tz, usageAtDayStart(reading, entry?.dayStart ?? null, now, tz))
   return { now, tz, cfg, snoozedUntil, reading, staleSince, budget }
 }
 
 // Where the budget stands, on the better of this session's own reading and the one
-// any session shared (pickReading): a new chat has no reading of its own yet. With the zone and
+// any session kept for its week (pickWeek): a new chat has no reading of its own yet. With the zone and
 // the time it was worked out for, which say when a last-known reading is from.
 export async function currentBudget($: EngineInterface): Promise<{
   budget: Budget | null
@@ -274,30 +280,35 @@ function measuredReading(own: Reading | null, measured: Reading, changed: readon
   return isRepeat ? own : measured
 }
 
-// A new reading of this session's own: record what today began with (the first
-// fresh reading of a day does, from the last one of the days before, as the store
-// still has it), keep and share it, and toast if a fresh one calls for it.
-async function acceptReading($: EngineInterface, reading: Reading, now: number): Promise<void> {
-  const own = await read($, readingAtom)
+// A new reading, kept in the record of its week (its account's): what today began with
+// (the first fresh reading of a day records it, from the last one of the days before,
+// as the week's record still has it), the reading itself, and today's warnings. One of
+// this session's own (a reply's) also becomes its reading, and tells which week its
+// surface is on. A toast is for the week this chat shows only.
+async function acceptReading($: EngineInterface, reading: Reading, now: number, isOwn: boolean): Promise<void> {
   const tz = await resolveTz($)
-  const [storedDayStart, previous] = await Promise.all([loadDayStart($), loadSharedReading($)])
-  const dayStart = nextDayStart(storedDayStart, previous, reading, now, tz)
-  if (dayStart !== storedDayStart) await saveDayStart($, dayStart)
-  if (reading !== own) {
-    await update($, readingAtom, () => reading)
-    await saveSharedReading($, reading, now)
+  const week = (await loadWeeks($)).find(w => w.reading.resetsMs === reading.resetsMs)
+  const storedDayStart = week?.dayStart ?? null
+  const dayStart = nextDayStart(storedDayStart, week?.reading ?? null, reading, now, tz)
+  await saveWeekReading($, reading, now)
+  if (dayStart !== storedDayStart) await saveWeekDayStart($, dayStart, now)
+  if (isOwn) {
+    if (reading !== (await read($, readingAtom))) await update($, readingAtom, () => reading)
+    const surface = await read($, surfaceAtom)
+    if (surface !== null) await saveSurfaceWeek($, surface, reading.resetsMs)
   }
 
   // The heads-up and the over toast go by a fresh reading only.
-  if (now - reading.at <= STALE_MS) {
-    const [cfg, ledger, snoozedUntil] = await Promise.all([loadConfig($), loadLedger($), loadSnooze($)])
-    const budget = computeBudget(reading, cfg, now, tz, usageAtDayStart(reading, dayStart, now, tz))
-    const decided = measureToast(budget, cfg, ledger, snoozedUntil, now, tz)
-    // The same ledger back means nothing changed; otherwise keep it, even with no
-    // toast, because a new week resets it.
-    if (decided.ledger !== ledger) await saveLedger($, decided.ledger)
-    if (decided.toast !== null) await $.ui.toast(toastText(decided.toast, budget))
-  }
+  if (now - reading.at > STALE_MS) return
+  if (!isOwn && (await loadView($)).reading?.resetsMs !== reading.resetsMs) return
+  const [cfg, snoozedUntil] = await Promise.all([loadConfig($), loadSnooze($)])
+  const ledger = week?.ledger ?? null
+  const budget = computeBudget(reading, cfg, now, tz, usageAtDayStart(reading, dayStart, now, tz))
+  const decided = measureToast(budget, cfg, ledger, snoozedUntil, now, tz)
+  // The same ledger back means nothing changed; otherwise keep it, even with no
+  // toast, because a new week resets it.
+  if (decided.ledger !== ledger) await saveWeekLedger($, decided.ledger, now)
+  if (decided.toast !== null) await $.ui.toast(toastText(decided.toast, budget))
 }
 
 // A measure: a reading the last reply brought, then a redraw. One from a window that
@@ -311,7 +322,7 @@ export async function onMeasure(
   const now = await $.clock.now()
   const measured = readingFrom(rateLimits, now)
   if (measured !== null && measured.resetsMs > now) {
-    await acceptReading($, measuredReading(await read($, readingAtom), measured, changed), now)
+    await acceptReading($, measuredReading(await read($, readingAtom), measured, changed), now, true)
   }
   await refresh($)
 }
@@ -319,6 +330,12 @@ export async function onMeasure(
 // Whether a person drives this session (session.start says): only those probe.
 export async function setInteractive($: EngineInterface, isInteractive: boolean): Promise<void> {
   if (differs(await read($, interactiveAtom), isInteractive)) await update($, interactiveAtom, () => isInteractive)
+}
+
+// The surface the session started on (terminal, VS Code, the desktop app), whose
+// account its week is.
+export async function setSurface($: EngineInterface, surface: string | null): Promise<void> {
+  if (differs(await read($, surfaceAtom), surface)) await update($, surfaceAtom, () => surface)
 }
 
 // A fresh figure without waiting for a reply: Claude Code's own /usage, run in the
@@ -329,16 +346,21 @@ export async function setInteractive($: EngineInterface, isInteractive: boolean)
 export async function probeUsage($: EngineInterface, isAsked: boolean): Promise<void> {
   if ((await $.env.get('WEEKLY_BUDGET_PROBE')) !== undefined) return
   if (!(await read($, interactiveAtom))) return
-  const now = await $.clock.now()
-  const [own, shared, lastAt] = await Promise.all([read($, readingAtom), loadSharedReading($), loadProbeAt($)])
-  const known = pickReading(own, shared, now).reading
-  if (known === null || !shouldProbe(lastAt, now, isAsked)) return
+  const [now, tz, weeks, lastAt] = await Promise.all([$.clock.now(), resolveTz($), loadWeeks($), loadProbeAt($)])
+  const live = weeks.filter(w => w.reading.resetsMs > now)
+  if (live.length === 0 || !shouldProbe(lastAt, now, isAsked)) return
   await saveProbeAt($, now)
   const ran = await $.process.run(PROBE_ARGV, { env: { [PROBE_ENV]: '1' }, timeoutMs: 20_000 })
-  const percent = ran.exitCode === 0 ? parseUsageWeek(ran.stdout) : null
-  const probed = percent === null ? null : probedReading(known, percent, await $.clock.now())
+  if (ran.exitCode !== 0) return
+  // /usage runs with the terminal's login: its figure is for the week whose reset it
+  // names, which may be another account's than this chat's.
+  const percent = parseUsageWeek(ran.stdout)
+  const weekKey = matchWeek(ran.stdout, live.map(w => w.reading.resetsMs), tz)
+  const week = live.find(w => w.reading.resetsMs === weekKey)
+  if (percent === null || week === undefined) return
+  const probed = probedReading(week.reading, percent, await $.clock.now())
   if (probed === null) return
-  await acceptReading($, probed, probed.at)
+  await acceptReading($, probed, probed.at, false)
   await refresh($)
 }
 

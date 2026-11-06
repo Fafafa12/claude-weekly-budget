@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { PROBE_ARGV, parseUsageWeek, probedReading, shouldProbe } from '../hooks/lib/probe'
+import { PROBE_ARGV, matchWeek, parseUsageWeek, probedReading, shouldProbe } from '../hooks/lib/probe'
+import { fixedOffsetTz } from '../hooks/lib/tz'
 
 // What `claude -p "/usage"` printed on 2026-11-06 (trimmed).
 const USAGE = `You are currently using your subscription to power your Claude Code usage
@@ -44,4 +45,20 @@ test('shouldProbe: at most every 10 minutes, or every 30 seconds when asked for'
   expect(shouldProbe(now - 10 * MIN, now, false)).toBe(true)
   expect(shouldProbe(now - 20_000, now, true)).toBe(false)
   expect(shouldProbe(now - 30_000, now, true)).toBe(true)
+})
+
+// /usage runs with the terminal's login, which may be another account than the chat's:
+// its reset time ("Nov 10, 8pm", or "7:59pm") says which known week it is about.
+const tz = fixedOffsetTz(180) // reset 2026-11-10T17:00Z is Tue 20:00 local
+const pro = Date.parse('2026-11-07T09:00:00Z') // Sat 12:00 local
+
+test("matchWeek finds the week whose reset /usage names, within an hour and a half", async () => {
+  expect(matchWeek(USAGE, [pro, reset], tz)).toBe(reset)
+  expect(matchWeek('Current week (all models): 48% used · resets Nov 10, 7:59pm (X)', [pro, reset], tz)).toBe(reset)
+  expect(matchWeek('Current week (all models): 3% used · resets Nov 7, 12pm', [pro, reset], tz)).toBe(pro)
+  expect(matchWeek('Current week (all models): 3% used · resets Nov 7, 12:00 PM', [pro, reset], tz)).toBe(pro)
+  // No known week resets then, or there is no reset to read: no week.
+  expect(matchWeek('Current week (all models): 3% used · resets Nov 8, 9am', [pro, reset], tz)).toBeNull()
+  expect(matchWeek('Current week (all models): 3% used', [pro, reset], tz)).toBeNull()
+  expect(matchWeek(USAGE, [], tz)).toBeNull()
 })

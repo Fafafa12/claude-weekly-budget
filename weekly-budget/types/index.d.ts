@@ -35,6 +35,7 @@ declare module 'claude-code' {
       compactRows: number | null // the rows the panel was last opened with: the engine's pane list has no rows
       stripHidden: boolean // the desktop strip was closed with its ✕ in this chat; /budget shows it again
       interactive: boolean // a session a person drives: only those run the /usage probe
+      surface: string | null // the surface the session started on: each may be signed in to its own account
     }
   }
 }

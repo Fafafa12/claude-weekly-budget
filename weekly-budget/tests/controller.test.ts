@@ -116,6 +116,22 @@ const run = ($: Engine, command: string, args: string) =>
 const stored = async ($: Engine, key: string): Promise<unknown> =>
   JSON.parse((await run($, 'probe', key)).text ?? 'null')
 
+// What the store keeps of one week (an account's): its reading, start of day and
+// warning record. Before anything is written, the single keys an older version kept.
+type StoredWeek = { reading: { resetsMs: number }; dayStart: unknown; ledger: unknown }
+const storedWeekPart = async ($: Engine, week: number, part: 'reading' | 'dayStart' | 'ledger'): Promise<unknown> => {
+  const weeks = await stored($, 'weeks')
+  if (Array.isArray(weeks)) return (weeks as StoredWeek[]).find(w => w.reading.resetsMs === week)?.[part] ?? null
+  const old = (await stored($, { reading: 'lastReading', dayStart: 'dayStart', ledger: 'ledger' }[part])) as {
+    resetsMs?: number
+    weekKey?: number
+  } | null
+  return old !== null && (old.resetsMs ?? old.weekKey) === week ? old : null
+}
+const storedReading = ($: Engine, week = reset) => storedWeekPart($, week, 'reading')
+const storedDayStart = ($: Engine, week = reset) => storedWeekPart($, week, 'dayStart')
+const storedLedger = ($: Engine, week = reset) => storedWeekPart($, week, 'ledger')
+
 const blocking = { config: { ...pinned, mode: 'block' }, lastReading: reading(43, now - 30 * 60e3) }
 // Its reading is half an hour old, so the reason says when it is from.
 const blockedReason = blockReason(budgetAt(43), ' · as of 14:30')
@@ -149,12 +165,17 @@ test('heads-up toast once across two sessions', { plugins: [probe] }, async ($, 
   expect(calls.toasts).toEqual([toastText('headsUp', budgetAt(37))])
   expect(calls.toasts[0]).toStartWith('Heads-up: 2% of today')
   // The ledger it left is what the second session reads.
-  expect(await stored($, 'ledger')).toEqual({ weekKey: reset, headsUpDay: '2026-11-05', overDay: null })
+  expect(await storedLedger($)).toEqual({ weekKey: reset, headsUpDay: '2026-11-05', overDay: null })
 })
 
 test('the second session finds the ledger the first wrote', async ($, on) => {
   const { calls, clock } = engine(on, {
-    store: { config: pinned, ledger: { weekKey: reset, headsUpDay: '2026-11-05', overDay: null } },
+    store: {
+      config: pinned,
+      weeks: [
+        { reading: reading(37), dayStart: null, ledger: { weekKey: reset, headsUpDay: '2026-11-05', overDay: null } },
+      ],
+    },
   })
 
   await start($, clock)
@@ -550,7 +571,7 @@ test('new week resets ledger', { plugins: [probe] }, async ($, on) => {
 
   expect(calls.toasts).toHaveLength(2)
   expect(calls.toasts[1]).toStartWith("Over today's budget: 43% used")
-  expect(await stored($, 'ledger')).toEqual({ weekKey: newReset, headsUpDay: null, overDay: '2026-11-05' })
+  expect(await storedLedger($, newReset)).toEqual({ weekKey: newReset, headsUpDay: null, overDay: '2026-11-05' })
 })
 
 test('a new week while snoozed still resets the ledger', { plugins: [probe] }, async ($, on) => {
@@ -561,7 +582,7 @@ test('a new week while snoozed still resets the ledger', { plugins: [probe] }, a
   await measure($, 43, newReset)
 
   expect(calls.toasts).toEqual([])
-  expect(await stored($, 'ledger')).toEqual({ weekKey: newReset, headsUpDay: null, overDay: null })
+  expect(await storedLedger($, newReset)).toEqual({ weekKey: newReset, headsUpDay: null, overDay: null })
 })
 
 test('a measure shares its reading with other sessions', { plugins: [probe] }, async ($, on) => {
@@ -569,7 +590,7 @@ test('a measure shares its reading with other sessions', { plugins: [probe] }, a
 
   await measure($, 33)
 
-  expect(await stored($, 'lastReading')).toEqual(reading(33))
+  expect(await storedReading($)).toEqual(reading(33))
 })
 
 // The rate limits a measure carries are the last response's. One raised because only
@@ -581,7 +602,7 @@ test('a context-only measure keeps the time of the figures it repeats', { plugin
   await clock.advance(HOUR_MS)
   await remeasure($, 33)
 
-  expect(await stored($, 'lastReading')).toEqual(reading(33, now))
+  expect(await storedReading($)).toEqual(reading(33, now))
   expect(calls.statuses.at(-1)).toEndWith(' · as of 15:00')
 })
 
@@ -592,7 +613,7 @@ test('a measure after a response re-dates the same figures', { plugins: [probe] 
   await clock.advance(HOUR_MS)
   await remeasure($, 33, ['context', 'cost'])
 
-  expect(await stored($, 'lastReading')).toEqual(reading(33, now + HOUR_MS))
+  expect(await storedReading($)).toEqual(reading(33, now + HOUR_MS))
   expect(calls.statuses.at(-1)).not.toContain('as of')
 })
 
@@ -605,7 +626,7 @@ test('a context-only measure re-dates figures this session never measured', { pl
   expect(calls.statuses.at(-1)).toEndWith(' · as of 14:00')
   await remeasure($, 33)
 
-  expect(await stored($, 'lastReading')).toEqual(reading(33, now))
+  expect(await storedReading($)).toEqual(reading(33, now))
   expect(calls.statuses.at(-1)).not.toContain('as of')
 })
 
@@ -628,7 +649,7 @@ test('a measure from a window that is over keeps the shared reading', { plugins:
 
   await measure($, 50, now - HOUR_MS)
 
-  expect(await stored($, 'lastReading')).toEqual(reading(33))
+  expect(await storedReading($)).toEqual(reading(33))
 })
 
 // A window that is over says nothing about the week now running: such a measure is
@@ -641,8 +662,8 @@ test('a measure from a window that is over is ignored', { plugins: [probe] }, as
   await measure($, 99, now - HOUR_MS)
 
   expect(calls.toasts).toEqual([])
-  expect(await stored($, 'ledger')).toEqual(ledger)
-  expect(await stored($, 'lastReading')).toEqual(reading(33))
+  expect(await storedLedger($)).toEqual(ledger)
+  expect(await storedReading($)).toEqual(reading(33))
   expect(calls.statuses.at(-1)).toContain('33% → 39%')
 })
 
@@ -652,7 +673,7 @@ test('a lower reading in the same window does not replace a higher one', { plugi
 
   await measure($, 33)
 
-  expect(await stored($, 'lastReading')).toEqual(higher)
+  expect(await storedReading($)).toEqual(higher)
 })
 
 test('a measure without a weekly window changes nothing but the line', async ($, on) => {
@@ -740,7 +761,7 @@ test("adaptive: a measure records what the day began with and shares out yesterd
   await measure($, 12)
 
   expect(calls.statuses.at(-1)).toBe('Week 12% / 30.9% allowed · today 18.9% left')
-  expect(await stored($, 'dayStart')).toEqual({ weekKey: reset, dayKey: '2026-11-05', percentUsed: 10 })
+  expect(await storedDayStart($)).toEqual({ weekKey: reset, dayKey: '2026-11-05', percentUsed: 10 })
 })
 
 test("adaptive: a chat with no reading of its own goes by today's record", async ($, on) => {
@@ -780,7 +801,7 @@ test('a day already recorded is not recorded again', { plugins: [probe] }, async
   await start($, clock)
   await measure($, 14)
 
-  expect(await stored($, 'dayStart')).toEqual(today)
+  expect(await storedDayStart($)).toEqual(today)
 })
 
 // A fresh figure without a reply: Claude Code's own /usage, run in the background.
@@ -796,7 +817,7 @@ test('a chat that starts runs /usage and shows its fresh figure', { plugins: [pr
 
   expect(calls.probes).toEqual([{ argv: PROBE, env: { WEEKLY_BUDGET_PROBE: '1' } }])
   expect(calls.statuses.at(-1)).toBe('Week 48% / 39% allowed · today 9% over')
-  expect(await stored($, 'lastReading')).toEqual({ percentUsed: 48, resetsMs: reset, at: now })
+  expect(await storedReading($)).toEqual({ percentUsed: 48, resetsMs: reset, at: now })
 })
 
 test('a session that is not interactive does not probe', async ($, on) => {
@@ -864,7 +885,7 @@ test('a probe that fails, or prints something else, changes nothing', { plugins:
   await start($, clock)
 
   expect(calls.probes).toHaveLength(1)
-  expect(await stored($, 'lastReading')).toEqual(reading(45, halfHourAgo))
+  expect(await storedReading($)).toEqual(reading(45, halfHourAgo))
   expect(calls.statuses.at(-1)).toBe('Week 45% / 39% allowed · today 6% over · as of 14:30')
 })
 
@@ -883,4 +904,70 @@ test('a reading going stale is probed again, at most every 10 minutes', async ($
   // 16 minutes on it is stale, and the last probe was 16 minutes ago: probe again.
   await clock.advance(5 * 60e3)
   expect(calls.probes).toHaveLength(2)
+})
+
+// Two accounts on one machine: "team" (the week resetting Tue 20:00) in the terminal
+// and VS Code, "pro" (resetting Sat 12:00 local) in the desktop app. Each keeps its own
+// readings, start of day and warning record.
+const proReset = Date.parse('2026-11-07T09:00:00Z')
+const teamWeek = (percentUsed: number, at = now - 10 * 60e3) => ({
+  reading: { percentUsed, resetsMs: reset, at },
+  dayStart: { weekKey: reset, dayKey: '2026-11-05', percentUsed: 45 },
+  ledger: null,
+})
+const proWeek = (percentUsed: number, at = now - 30 * 60e3) => ({
+  reading: { percentUsed, resetsMs: proReset, at },
+  dayStart: null,
+  ledger: null,
+})
+
+test("another account's reading leaves this account's week alone", { plugins: [probe] }, async ($, on) => {
+  const { clock } = engine(on, { store: { ...shown, weeks: [teamWeek(47)] } })
+  await start($, clock)
+
+  await measure($, 3, proReset)
+  await measure($, 49)
+
+  expect(await storedDayStart($)).toEqual({ weekKey: reset, dayKey: '2026-11-05', percentUsed: 45 })
+  expect(await storedReading($)).toEqual({ percentUsed: 49, resetsMs: reset, at: now })
+  expect(await storedReading($, proReset)).toEqual({ percentUsed: 3, resetsMs: proReset, at: now })
+})
+
+test('a reply tells which week its surface is on', { plugins: [probe] }, async ($, on) => {
+  const { clock } = engine(on, { store: shown, surfaces: ['desktop'] })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await clock.settle()
+
+  await measure($, 3, proReset)
+
+  expect(await stored($, 'surfaceWeeks')).toEqual({ desktop: proReset })
+})
+
+test('a new chat shows the week its surface last saw, else the one read last', async ($, on) => {
+  const weeks = [teamWeek(49, now - 5 * 60e3), proWeek(3)]
+  const pro = engine(on, { store: { ...shown, weeks, surfaceWeeks: { terminal: proReset } } })
+  await start($, pro.clock)
+  expect(pro.calls.statuses.at(-1)).toContain('Week 3% /')
+})
+
+test('with no surface remembered a new chat shows the week read last', async ($, on) => {
+  const { calls, clock } = engine(on, { store: { ...shown, weeks: [teamWeek(49, now - 5 * 60e3), proWeek(3)] } })
+  await start($, clock)
+  expect(calls.statuses.at(-1)).toContain('Week 49% /')
+})
+
+test("/usage updates the week whose reset it names, not another account's chat", { plugins: [probe] }, async ($, on) => {
+  const { calls, clock } = engine(on, {
+    store: { ...shown, weeks: [teamWeek(47), proWeek(3)], probeAt: { at: now - 5 * 60e3 } },
+    usage: USAGE_48,
+  })
+  await start($, clock)
+  await measure($, 3, proReset) // this chat is on the pro account
+
+  await run($, 'budget', '')
+  await clock.settle()
+
+  expect(calls.probes).toHaveLength(1)
+  expect(await storedReading($)).toEqual({ percentUsed: 48, resetsMs: reset, at: now })
+  expect(calls.statuses.at(-1)).toContain('Week 3% /')
 })
