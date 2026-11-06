@@ -3,6 +3,7 @@ import type { ElementTable, EngineInterface, RenderElement, RenderInput } from '
 import {
   applyCompactPanel,
   applyConfig,
+  currentSettings,
   getPinDraftDays,
   getSettingsError,
   setPinDraftDays,
@@ -10,8 +11,8 @@ import {
 } from '../controller'
 import { DAY_NAMES } from '../lib/config'
 import type { Config, Leftover, Mode, Pin, StatusStyle, Weekday } from '../lib/config'
+import type { Tz } from '../lib/tz'
 import { pct } from '../lib/format'
-import { loadConfig } from '../lib/store'
 import { planLine } from './shared'
 
 type Choice<V extends string = string> = { value: V; label: string }
@@ -91,12 +92,12 @@ const daysLabel = (days: Weekday[]): string => days.map(day => DAY_NAMES[day]).j
 
 // The stored config with a change, which goes through the plan's checks like any other.
 async function change($: EngineInterface, patch: Partial<Config>): Promise<void> {
-  await applyConfig($, { ...(await loadConfig($)), ...patch })
+  await applyConfig($, { ...(await currentSettings($)).cfg, ...patch })
 }
 
 // Pins the picked days at the percent, in place of any pin that shares a day with them.
 async function addPin($: EngineInterface, text: string): Promise<void> {
-  const [cfg, picked] = await Promise.all([loadConfig($), getPinDraftDays($)])
+  const [{ cfg }, picked] = await Promise.all([currentSettings($), getPinDraftDays($)])
   const { days } = pinGroup(picked)
   const rest = cfg.pins.filter(pin => !pin.days.some(day => days.includes(day)))
   // NaN is no share: the plan's checks refuse it with the words for a bad percent.
@@ -107,7 +108,7 @@ async function addPin($: EngineInterface, text: string): Promise<void> {
 // By what the pin is rather than where it stands: another session may have changed
 // the list since this one drew its buttons.
 async function removePin($: EngineInterface, gone: Pin): Promise<void> {
-  const cfg = await loadConfig($)
+  const { cfg } = await currentSettings($)
   const isGone = (pin: Pin) => pin.percent === gone.percent && pin.days.join() === gone.days.join()
   await applyConfig($, { ...cfg, pins: cfg.pins.filter(pin => !isGone(pin)) })
 }
@@ -178,6 +179,13 @@ function choiceRow(
   )
 }
 
+// Which account the settings are for: the one whose week resets at the time the chat
+// shows (each account resets at its own weekday and time); none seen yet, every account.
+function whoseSettings(accountWeek: number | null, tz: Tz): string {
+  if (accountWeek === null) return 'Settings for every account, until one is seen'
+  return `Settings for the account whose week resets ${DAY_NAMES[tz.weekday(accountWeek)]} ${tz.hhmm(accountWeek)}`
+}
+
 // Pins that add up to the whole week leave the other days nothing.
 function leavesDaysEmpty(pins: Pin[]): boolean {
   const total = pins.reduce((sum, pin) => sum + pin.percent, 0)
@@ -196,11 +204,12 @@ export async function renderSettings($: EngineInterface, e: RenderInput<'Pane'>)
   }
   const els = $.ui.resolve(e)
   const { Box, Button, Input, Text } = els
-  const [cfg, picked, error] = await Promise.all([loadConfig($), getPinDraftDays($), getSettingsError($)])
+  const [{ cfg, accountWeek, tz }, picked, error] = await Promise.all([currentSettings($), getPinDraftDays($), getSettingsError($)])
 
   return (
     <Box flexDirection="column" gap={1}>
       {e.surface === 'terminal' && <Text dimColor>{KEY_HINT}</Text>}
+      <Text weight="semibold">{whoseSettings(accountWeek, tz)}</Text>
       {error !== null && <Text color="error">{error}</Text>}
       <Box flexDirection="column">
         {choiceRow(els, 'pin-days', 'Pin', PIN_GROUPS, pinGroup(picked).value, days => setPinDraftDays($, days))}
@@ -233,7 +242,7 @@ export async function renderSettings($: EngineInterface, e: RenderInput<'Pane'>)
         />
       </Box>
       <Box flexDirection="column">
-        {choiceRow(els, 'status-style', 'Status line', STYLES, cfg.statusStyle, value => pickStyle($, value))}
+        {choiceRow(els, 'status-style', 'Status line (terminal)', STYLES, cfg.statusStyle, value => pickStyle($, value))}
         {choiceRow(els, 'compact-panel', 'Compact panel (VS Code)', PANEL, cfg.showCompactPanel ? 'on' : 'off', value =>
           applyCompactPanel($, value === 'on'),
         )}

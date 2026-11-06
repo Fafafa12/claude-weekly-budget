@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DEFAULT_CONFIG, dayShares, normalizeConfig, validatePins } from '../hooks/lib/config'
+import { accountSlot, DEFAULT_CONFIG, dayShares, normalizeConfig, pickConfig, validatePins } from '../hooks/lib/config'
 import type { Config, Pin, Weekday } from '../hooks/lib/config'
 import { computeBudget, localDayStart, nextDayStart, readingFrom, usageAtDayStart, weekPieces } from '../hooks/lib/plan'
 import { fixedOffsetTz } from '../hooks/lib/tz'
@@ -279,4 +279,29 @@ test('usageAtDayStart uses the record for today, else its best guess', async () 
   expect(usageAtDayStart(reading, null, now, tz)).toBe(12)
   // Never more than is used now.
   expect(usageAtDayStart(reading, { weekKey: reset, dayKey: '2026-11-05', percentUsed: 20 }, now, tz)).toBe(12)
+})
+
+// Settings are kept per account, named by the slot of the week its limit resets in:
+// the same weekday and time every week (Experts-cpa Tue 20:00, Pro Fri 12:00).
+test('an account keeps its slot from one week to the next', async () => {
+  expect(accountSlot(reset)).toBe(accountSlot(reset + 7 * DAY_MS))
+  expect(accountSlot(reset)).not.toBe(accountSlot(reset - DAY_MS))
+  expect(accountSlot(reset)).toMatch(/^\d+$/)
+})
+
+test("pickConfig: the account's own, else the one last used on this surface, else the old single one", async () => {
+  const team = reset
+  const pro = Date.parse('2026-11-06T09:00:00Z')
+  const block: Config = { ...DEFAULT_CONFIG, mode: 'block' }
+  const rewarn: Config = { ...DEFAULT_CONFIG, mode: 'rewarn' }
+  const configs = { [accountSlot(team)]: block }
+
+  expect(pickConfig(configs, null, team, null).mode).toBe('block')
+  expect(pickConfig(configs, null, team + 7 * DAY_MS, null).mode).toBe('block')
+  // An account seen for the first time: the settings of the surface's last account.
+  expect(pickConfig(configs, null, pro, team).mode).toBe('block')
+  // Else the single config an older version kept, else the defaults.
+  expect(pickConfig({}, rewarn, pro, null).mode).toBe('rewarn')
+  expect(pickConfig({}, null, null, null)).toEqual(DEFAULT_CONFIG)
+  expect(pickConfig(configs, rewarn, null, team).mode).toBe('block')
 })

@@ -107,3 +107,28 @@ export function normalizeConfig(raw: unknown): Config {
     leftover: readOneOf(r.leftover, LEFTOVERS, DEFAULT_CONFIG.leftover),
   }
 }
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+
+// Each account's week resets at the same weekday and time every week, and no session
+// can tell which account another is signed in to; so that time, its slot in the week,
+// names the account that settings are kept for. A week reset at an unusual time gets
+// another slot.
+export function accountSlot(weekKey: number): string {
+  return String(((weekKey % WEEK_MS) + WEEK_MS) % WEEK_MS)
+}
+
+// The settings for the account a session shows (its week, `weekKey`): its own; an
+// account seen for the first time takes those of the account last seen on the same
+// surface (`surfaceWeekKey`); else the single config an older version kept, or the
+// defaults.
+export function pickConfig(
+  configs: Readonly<Record<string, Config>>,
+  legacy: Config | null,
+  weekKey: number | null,
+  surfaceWeekKey: number | null,
+): Config {
+  const own = weekKey === null ? undefined : configs[accountSlot(weekKey)]
+  const surfaces = surfaceWeekKey === null ? undefined : configs[accountSlot(surfaceWeekKey)]
+  return own ?? surfaces ?? legacy ?? DEFAULT_CONFIG
+}

@@ -26,7 +26,7 @@ Advanced: `WEEKLY_BUDGET_TZ_OFFSET_MIN` in the environment overrides the time zo
 
 ## Settings
 
-Run `/budget-config` to change them. Every change applies at once, in every open chat, terminal and VS Code alike. A value the plan's checks refuse, such as shares adding up to more than 100%, shows in red and changes nothing.
+Run `/budget-config` to change them. **Each account has its own settings**, and the panel says which account it is changing ("Settings for the account whose week resets Tue 20:00"): an account is told by the weekday and time its week resets, the same every week. A change applies at once, in every open chat on that account. An account seen for the first time starts with a copy of the settings last used on the same app. Snooze is one for all. A value the plan's checks refuse, such as shares adding up to more than 100%, shows in red and changes nothing.
 
 - **In VS Code**, click a choice.
 - **In the terminal**, the settings open with the keyboard on them: Tab or the arrow keys move, Enter chooses, Esc goes back to the prompt. To come back to the panel later, press `ctrl+x tab`.
@@ -39,10 +39,10 @@ Run `/budget-config` to change them. Every change applies at once, in every open
 | **Mode** | Warn once · Every message · Block | Warn once | How it warns when you are over today's budget. See [Warnings and modes](#warnings-and-modes). |
 | **Heads-up (of today left)** | Off · 10% · 25% · 50% | 25% | An early notification when that much of today's share is left. |
 | **Snooze options** | minutes, comma-separated | 60 | The snooze buttons in the details. "Snooze today" is always there too. |
-| **Status line** | Numbers · Bar · Minimal | Bar | The terminal's line under the prompt. |
+| **Status line (terminal)** | Numbers · Bar · Minimal | Bar | The terminal's line under the prompt. No effect in VS Code or the desktop app, which have no such line. |
 | **Compact panel (VS Code)** | On · Off | On | The VS Code panel's view: compact (details behind "▸ Details") or full (details always shown). |
 
-The settings are kept in `~/.claude/plugins/store/`, shared by all your sessions.
+The settings are kept in `~/.claude/plugins/store/`, shared by all your sessions. If Claude ever resets an account's week at an unusual time, that account's settings start again from a copy of the last ones used on that app.
 
 ### Leftover: Fixed or Adaptive
 

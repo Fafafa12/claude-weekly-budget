@@ -2,7 +2,7 @@ import type { On, PromptOrigin, PromptSubmitInput, RenderSurface, UsageUnit } fr
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock, Plugin } from 'claude-code/testing'
 
-import { DEFAULT_CONFIG } from '../hooks/lib/config'
+import { accountSlot, DEFAULT_CONFIG } from '../hooks/lib/config'
 import type { Config } from '../hooks/lib/config'
 import { computeBudget } from '../hooks/lib/plan'
 import { fixedOffsetTz, systemTz } from '../hooks/lib/tz'
@@ -989,4 +989,20 @@ test('/budget replies with the fresh figure /usage gave', async ($, on) => {
   await start($, clock)
 
   expect((await run($, 'budget', '')).text).toBe('48% of 39% · 9% over today · resets Tue 20:00')
+})
+
+test('an account seen for the first time starts with the settings last used on the same app', { plugins: [probe] }, async ($, on) => {
+  const { clock } = engine(on, {
+    store: {
+      configs: { [accountSlot(reset)]: { ...pinned, mode: 'block' } },
+      weeks: [teamWeek(47)],
+      surfaceWeeks: { terminal: reset },
+    },
+  })
+  await start($, clock)
+
+  await measure($, 3, proReset)
+
+  const configs = (await stored($, 'configs')) as Record<string, { mode: string; pins: unknown }>
+  expect(configs[accountSlot(proReset)]).toMatchObject({ mode: 'block', pins: pinned.pins })
 })

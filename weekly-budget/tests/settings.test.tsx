@@ -2,7 +2,7 @@ import type { On, PaneOpenArgs, RenderSurface, UiPane } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock, Plugin } from 'claude-code/testing'
 
-import { DEFAULT_CONFIG } from '../hooks/lib/config'
+import { accountSlot, DEFAULT_CONFIG } from '../hooks/lib/config'
 import type { Config, Pin } from '../hooks/lib/config'
 
 const now = Date.parse('2026-11-05T12:00:00Z') // Thu 15:00 local, with WEEKLY_BUDGET_TZ_OFFSET_MIN=180
@@ -43,7 +43,12 @@ const run = ($: Engine, command: string, args = '') =>
   $.command.run({ command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
 const stored = async ($: Engine, key: string): Promise<unknown> =>
   JSON.parse((await run($, 'probe', key)).text ?? 'null')
-const storedConfig = async ($: Engine) => (await stored($, 'config')) as Config
+// The settings kept for the account this test's chat shows (the week resetting Tue
+// 20:00), or, with no account seen yet, the single config.
+const storedConfig = async ($: Engine, week = reset) => {
+  const configs = (await stored($, 'configs')) as Record<string, Config> | null
+  return (configs?.[accountSlot(week)] ?? (await stored($, 'config'))) as Config
+}
 
 type Calls = { opens: PaneOpenArgs[]; closes: string[]; statuses: (string | undefined)[] }
 
@@ -679,3 +684,58 @@ for (const surface of SURFACES) {
     await ui.unmount()
   })
 }
+
+// Each account has its own settings, named by the weekly slot its limit resets in.
+const proReset = Date.parse('2026-11-07T09:00:00Z') // Sat 12:00 local
+const readingOf = (percentUsed: number, resetsMs = reset) => ({ percentUsed, resetsMs, at: now })
+
+test("a change is kept for the account the chat shows, not for another's", { plugins: [probe] }, async ($, on) => {
+  engine(on, { store: { config: DEFAULT_CONFIG, lastReading: readingOf(33) } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  await ui.press({ key: 'mode-block' })
+
+  expect((await storedConfig($)).mode).toBe('block')
+  expect((await storedConfig($, proReset)).mode).toBe('warn')
+  expect(((await stored($, 'config')) as Config).mode).toBe('warn')
+  await ui.unmount()
+})
+
+test("another account's chat shows its own settings", async ($, on) => {
+  engine(on, {
+    store: {
+      configs: { [accountSlot(reset)]: { ...DEFAULT_CONFIG, mode: 'block' } },
+      weeks: [{ reading: readingOf(3, proReset), dayStart: null, ledger: null }],
+    },
+  })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  expect(await chosen(ui, 'mode')).toBe('warn')
+  await ui.unmount()
+})
+
+test('the settings say which account they are for', async ($, on) => {
+  engine(on, { store: { config: DEFAULT_CONFIG, lastReading: readingOf(33) } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  expect((await ui.find({ type: 'Text', text: /^Settings for/ }))?.text).toBe(
+    'Settings for the account whose week resets Tue 20:00',
+  )
+  await ui.unmount()
+})
+
+test('with no account seen yet the settings say so', async ($, on) => {
+  engine(on)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  expect((await ui.find({ type: 'Text', text: /^Settings for/ }))?.text).toBe('Settings for every account, until one is seen')
+  await ui.unmount()
+})
+
+test('the status line row says it is the terminal\'s', async ($, on) => {
+  engine(on)
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+
+  expect(await ui.find({ type: 'Text', text: /^Status line \(terminal\)$/ })).toBeDefined()
+  await ui.unmount()
+})

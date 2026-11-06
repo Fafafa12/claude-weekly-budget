@@ -25,6 +25,7 @@ const KEY = {
   probeAt: 'probeAt',
   weeks: 'weeks',
   surfaceWeeks: 'surfaceWeeks',
+  configs: 'configs',
 } as const
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -47,6 +48,31 @@ export async function loadConfigVersion($: EngineInterface): Promise<number | nu
 
 export async function saveConfig($: EngineInterface, c: Config): Promise<void> {
   await $.store.set(KEY.config, c)
+}
+
+// The single config an older version kept, for every account: null when there is none.
+export async function loadLegacyConfig($: EngineInterface): Promise<Config | null> {
+  const v = await $.store.get(KEY.config)
+  return isRecord(v) ? normalizeConfig(v) : null
+}
+
+// The settings of each account, by its weekly slot (accountSlot).
+export async function loadConfigs($: EngineInterface): Promise<Record<string, Config>> {
+  const v = await $.store.get(KEY.configs)
+  if (!isRecord(v)) return {}
+  return Object.fromEntries(Object.entries(v).filter(e => isRecord(e[1])).map(([slot, c]) => [slot, normalizeConfig(c)]))
+}
+
+// The version an account's stored settings say they are (or the single config's, for
+// no account), before they are read as this version's: null when they say none.
+export async function loadConfigVersionFor($: EngineInterface, slot: string | null): Promise<number | null> {
+  const v = slot === null ? await $.store.get(KEY.config) : (await $.store.get(KEY.configs) as Record<string, unknown> | undefined)?.[slot]
+  return isRecord(v) && isNum(v.version) ? v.version : null
+}
+
+export async function saveAccountConfig($: EngineInterface, slot: string, c: Config): Promise<void> {
+  const v = await $.store.get(KEY.configs)
+  await $.store.set(KEY.configs, { ...(isRecord(v) ? v : {}), [slot]: c })
 }
 
 export async function loadSnooze($: EngineInterface): Promise<number | null> {

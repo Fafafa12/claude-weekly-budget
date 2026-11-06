@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PromptSubmitInput, SessionRateLimit, UsageUnit } from 'claude-code'
 
-import { validatePins } from './lib/config'
+import { accountSlot, pickConfig, validatePins } from './lib/config'
 import type { Config } from './lib/config'
 import { budgetReply, staleMark, statusLine } from './lib/format'
 import { computeBudget, nextDayStart, readingFrom, usageAtDayStart } from './lib/plan'
@@ -9,13 +9,15 @@ import { matchWeek, PROBE_ARGV, PROBE_ENV, parseUsageWeek, probedReading, should
 import type { Budget, Reading } from './lib/plan'
 import {
   STALE_MS,
-  loadConfig,
-  loadConfigVersion,
+  loadConfigVersionFor,
+  loadConfigs,
+  loadLegacyConfig,
   loadProbeAt,
   loadSnooze,
   loadSurfaceWeeks,
   loadWeeks,
   pickWeek,
+  saveAccountConfig,
   saveConfig,
   saveProbeAt,
   saveSnooze,
@@ -84,10 +86,11 @@ export async function resolveTz($: EngineInterface): Promise<Tz> {
 
 // The store read into everything a decision or a display needs, at one `now`.
 async function loadView($: EngineInterface) {
-  const [now, tz, cfg, snoozedUntil, own, weeks, surfaceWeeks, surface] = await Promise.all([
+  const [now, tz, configs, legacy, snoozedUntil, own, weeks, surfaceWeeks, surface] = await Promise.all([
     $.clock.now(),
     resolveTz($),
-    loadConfig($),
+    loadConfigs($),
+    loadLegacyConfig($),
     loadSnooze($),
     read($, readingAtom),
     loadWeeks($),
@@ -95,13 +98,24 @@ async function loadView($: EngineInterface) {
     read($, surfaceAtom),
   ])
   // This chat's account's week: its own replies say which; before the first, the one
-  // its surface last saw, else the one read last (pickWeek).
-  const { entry, reading, staleSince } = pickWeek(own, weeks, surface === null ? null : (surfaceWeeks[surface] ?? null), now)
+  // its surface last saw, else the one read last (pickWeek). Its settings are that
+  // account's (pickConfig).
+  const surfaceWeek = surface === null ? null : (surfaceWeeks[surface] ?? null)
+  const { entry, reading, staleSince } = pickWeek(own, weeks, surfaceWeek, now)
+  const accountWeek = reading?.resetsMs ?? null
+  const cfg = pickConfig(configs, legacy, accountWeek, surfaceWeek)
   const budget =
     reading === null
       ? null
       : computeBudget(reading, cfg, now, tz, usageAtDayStart(reading, entry?.dayStart ?? null, now, tz))
-  return { now, tz, cfg, snoozedUntil, reading, staleSince, budget }
+  return { now, tz, cfg, snoozedUntil, reading, staleSince, budget, accountWeek }
+}
+
+// The settings a chat shows and changes: its account's, and which account that is
+// (the week it shows; null with no account seen yet).
+export async function currentSettings($: EngineInterface): Promise<{ cfg: Config; accountWeek: number | null; tz: Tz }> {
+  const { cfg, accountWeek, tz } = await loadView($)
+  return { cfg, accountWeek, tz }
 }
 
 // Where the budget stands, on the better of this session's own reading and the one
@@ -245,14 +259,18 @@ export async function setSettingsError($: EngineInterface, message: string | nul
 // nothing but the error the pane shows, which is returned. So does any change over
 // a config a newer version of the plugin saved: this one would lose what it added.
 export async function applyConfig($: EngineInterface, next: Config): Promise<string | null> {
-  const storedVersion = await loadConfigVersion($)
+  // Kept for the account the chat shows; with none seen yet, for every account.
+  const { accountWeek } = await loadView($)
+  const slot = accountWeek === null ? null : accountSlot(accountWeek)
+  const storedVersion = await loadConfigVersionFor($, slot)
   const error = storedVersion !== null && storedVersion > 1 ? NEWER_CONFIG : validatePins(next.pins)
   if (error !== null) {
     await setSettingsError($, error)
     return error
   }
 
-  await saveConfig($, next)
+  if (slot === null) await saveConfig($, next)
+  else await saveAccountConfig($, slot, next)
   await setSettingsError($, null)
   await refreshQuietly($)
   return null
@@ -263,7 +281,7 @@ export async function applyConfig($: EngineInterface, next: Config): Promise<str
 // asks a panel that is up again, for the rows of the view it is in now. What the
 // toggle opened stays opened.
 export async function applyCompactPanel($: EngineInterface, isCompact: boolean): Promise<void> {
-  await applyConfig($, { ...(await loadConfig($)), showCompactPanel: isCompact })
+  await applyConfig($, { ...(await loadView($)).cfg, showCompactPanel: isCompact })
 }
 
 // The reading a measure brings. Its rate limits are the last response's: a measure
@@ -292,16 +310,26 @@ async function acceptReading($: EngineInterface, reading: Reading, now: number, 
   const dayStart = nextDayStart(storedDayStart, week?.reading ?? null, reading, now, tz)
   await saveWeekReading($, reading, now)
   if (dayStart !== storedDayStart) await saveWeekDayStart($, dayStart, now)
+  const [configs, legacy, surfaceWeeks, surface] = await Promise.all([
+    loadConfigs($),
+    loadLegacyConfig($),
+    loadSurfaceWeeks($),
+    read($, surfaceAtom),
+  ])
+  const surfaceWeek = surface === null ? null : (surfaceWeeks[surface] ?? null)
+  const cfg = pickConfig(configs, legacy, reading.resetsMs, surfaceWeek)
   if (isOwn) {
     if (reading !== (await read($, readingAtom))) await update($, readingAtom, () => reading)
-    const surface = await read($, surfaceAtom)
+    // An account seen for the first time starts with the settings last used here.
+    const slot = accountSlot(reading.resetsMs)
+    if (configs[slot] === undefined) await saveAccountConfig($, slot, cfg)
     if (surface !== null) await saveSurfaceWeek($, surface, reading.resetsMs)
   }
 
   // The heads-up and the over toast go by a fresh reading only.
   if (now - reading.at > STALE_MS) return
   if (!isOwn && (await loadView($)).reading?.resetsMs !== reading.resetsMs) return
-  const [cfg, snoozedUntil] = await Promise.all([loadConfig($), loadSnooze($)])
+  const snoozedUntil = await loadSnooze($)
   const ledger = week?.ledger ?? null
   const budget = computeBudget(reading, cfg, now, tz, usageAtDayStart(reading, dayStart, now, tz))
   const decided = measureToast(budget, cfg, ledger, snoozedUntil, now, tz)
