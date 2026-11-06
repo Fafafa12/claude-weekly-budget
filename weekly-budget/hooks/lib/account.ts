@@ -1,4 +1,5 @@
 import type { Account } from '../../types'
+import { weekKey } from './plan'
 import type { Reading } from './plan'
 
 // Who a chat is signed in as, and its account's weekly usage, as Anthropic's own
@@ -40,13 +41,13 @@ export function accountLabel(a: Account | null): string | null {
   return isTeam && a.organization !== null ? `${a.organization} (${email})` : email
 }
 
-// The week out of the usage answer: its figure to one decimal, and its reset cut to
-// whole seconds, as replies report it, so that both name the same week.
+// The week out of the usage answer: its figure to one decimal, and its reset keyed to
+// the minute, as a reply's is, so that both name the same week.
 export function parseUsageApi(v: unknown, at: number): Reading | null {
   if (!isObj(v) || !isObj(v.seven_day)) return null
   const { utilization, resets_at } = v.seven_day
   if (typeof utilization !== 'number' || !Number.isFinite(utilization) || typeof resets_at !== 'string') return null
   const resetsMs = Date.parse(resets_at)
   if (Number.isNaN(resetsMs)) return null
-  return { percentUsed: Math.round(utilization * 10) / 10, resetsMs: Math.floor(resetsMs / 1000) * 1000, at }
+  return { percentUsed: Math.round(utilization * 10) / 10, resetsMs: weekKey(resetsMs), at }
 }

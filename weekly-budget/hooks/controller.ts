@@ -384,6 +384,17 @@ export async function setSurface($: EngineInterface, surface: string | null): Pr
   if (differs(await read($, surfaceAtom), surface)) await update($, surfaceAtom, () => surface)
 }
 
+// A client attached: someone is there. A chat the SDK drives (the desktop app's)
+// starts with no surface and no one at a prompt, so the first client to attach names
+// its surface, and makes it a chat someone drives, which probes then: that is when it
+// learns whose account it is. One that someone already drove fetches nothing more.
+export async function onAttach($: EngineInterface, surface: string): Promise<void> {
+  if ((await read($, surfaceAtom)) === null) await setSurface($, surface)
+  if (await read($, interactiveAtom)) return
+  await setInteractive($, true)
+  await probeUsageQuietly($, false)
+}
+
 // A fresh figure without waiting for a reply: Claude Code's own /usage, run in the
 // background (lib/probe.ts), at most every 10 minutes across all chats on its own and
 // every 30 seconds when /budget asks. Never in the Claude Code a probe starts, nor in

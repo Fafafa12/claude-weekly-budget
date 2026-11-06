@@ -36,8 +36,12 @@ test('accountLabel names a team account by its organization, and any by its emai
 })
 
 test('parseUsageApi reads the week, with its exact reset', async () => {
-  // The reset is cut to whole seconds, as replies report it, so both name the same week.
+  // The reset is taken to the nearest minute, as a reply's is, so both name the same
+  // week: the address may give it a moment before the minute or after.
   expect(parseUsageApi(USAGE, now)).toEqual({ percentUsed: 54, resetsMs: Date.parse('2026-11-10T17:00:00Z'), at: now })
+  expect(parseUsageApi({ seven_day: { utilization: 54, resets_at: '2026-11-10T16:59:59.723+00:00' } }, now)?.resetsMs).toBe(
+    Date.parse('2026-11-10T17:00:00Z'),
+  )
   expect(parseUsageApi({ seven_day: { utilization: 54.25, resets_at: '2026-11-10T17:00:00Z' } }, now)?.percentUsed).toBe(54.3)
   expect(parseUsageApi({ seven_day: null }, now)).toBeNull()
   expect(parseUsageApi({ seven_day: { utilization: 'x', resets_at: '2026-11-10T17:00:00Z' } }, now)).toBeNull()

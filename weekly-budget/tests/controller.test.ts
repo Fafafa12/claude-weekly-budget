@@ -1085,6 +1085,48 @@ test("an account's own fetch is throttled for it alone", async ($, on) => {
   expect(calls.fetches.map(f => f.url)).toEqual(['https://api.anthropic.com/api/oauth/profile'])
 })
 
+test("a reply and the account's own answer name one week, though one comes a moment before the minute", { plugins: [probe] }, async ($, on) => {
+  const { clock } = engine(on, { store: shown, oauth: { profile: PROFILE, usage: usageAnswer(54, '2026-11-10T16:59:59.723+00:00') } })
+  await start($, clock)
+
+  await measure($, 55)
+
+  const weeks = (await stored($, 'weeks')) as StoredWeek[]
+  expect(weeks.map(w => w.reading.resetsMs)).toEqual([reset])
+  expect(((await stored($, 'accounts')) as Record<string, { slot: string }>)['acc-1']?.slot).toBe(accountSlot(reset))
+  expect((await run($, 'budget', '')).text).toContain('Experts-cpa (faneva@experts-cpa.com)')
+})
+
+// The desktop app drives Claude Code through the SDK: its chat starts with no surface
+// and no one at a prompt, and its client attaches after.
+test("the desktop app's chat is named, and fetches its week, once its client attaches", { plugins: [probe] }, async ($, on) => {
+  const { calls, clock } = engine(on, { store: shown, surfaces: ['desktop'], oauth: { profile: PROFILE, usage: usageAnswer(3, '2026-11-07T08:59:59.880+00:00') } })
+  await $.session.start({ cwd: '/', surface: null, isInteractive: false })
+  await clock.settle()
+  expect(calls.fetches).toEqual([])
+
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  await clock.settle()
+
+  expect(calls.fetches.map(f => f.url)).toEqual([
+    'https://api.anthropic.com/api/oauth/profile',
+    'https://api.anthropic.com/api/oauth/usage',
+  ])
+  expect(((await stored($, 'accounts')) as Record<string, { slot: string }>)['acc-1']?.slot).toBe(accountSlot(proReset))
+  expect(await stored($, 'surfaceWeeks')).toEqual({ desktop: proReset })
+  expect((await run($, 'budget', '')).text).toContain('Experts-cpa (faneva@experts-cpa.com)')
+})
+
+test('a client attaching to a chat someone already drives fetches nothing more', async ($, on) => {
+  const { calls, clock } = engine(on, { store: shown, oauth: { profile: PROFILE, usage: usageAnswer(54) } })
+  await start($, clock)
+
+  await $.session.attach({ surface: 'mobile', clientId: 'mobile:phone' })
+  await clock.settle()
+
+  expect(calls.fetches).toHaveLength(2)
+})
+
 test('settings follow an account whose week moves to another slot', { plugins: [probe] }, async ($, on) => {
   const oldReset = reset - 3 * 60 * 60e3 // the account's week used to reset three hours earlier
   const { clock } = engine(on, {

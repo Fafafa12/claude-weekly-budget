@@ -181,6 +181,10 @@ test('readingFrom', async () => {
   expect(picked).toEqual({ percentUsed: 33, resetsMs: reset, at: now })
   expect(readingFrom([], now)).toBeNull()
   expect(readingFrom([{ kind: 'seven_day', percentUsed: 33 }], now)).toBeNull()
+  // A reset a moment off the minute names the same week as one on it.
+  const off = (resetsAt: string) => readingFrom([{ kind: 'seven_day', percentUsed: 33, resetsAt }], now)?.resetsMs
+  expect(off('2026-11-10T16:59:59.723Z')).toBe(reset)
+  expect(off('2026-11-10T17:00:00.460Z')).toBe(reset)
   expect(readingFrom([{ kind: 'seven_day', percentUsed: 33, resetsAt: 'soon' }], now)).toBeNull()
 })
 

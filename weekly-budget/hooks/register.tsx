@@ -2,6 +2,7 @@ import type { Register } from 'claude-code'
 
 import {
   ensureCompact,
+  onAttach,
   onMeasure,
   onPrompt,
   openSettings,
@@ -39,9 +40,11 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // The surface that attached may be the first to draw, or the terminal.
+  // The surface that attached may be the first to draw, or the terminal; in the
+  // desktop app, it is the first sign that someone is there.
   on('session.attach', async ($, e, next) => {
     const attached = await next(e)
+    await onAttach($, e.surface).catch(() => {})
     await refreshQuietly($)
     await ensureCompact($).catch(() => {})
 
