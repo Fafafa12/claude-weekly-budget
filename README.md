@@ -253,12 +253,12 @@ The desktop app keeps its own copy of the marketplace, so after an update there,
 | **0.6.1** | The desktop app names its account too (its chats start without a screen; the window arriving now counts). One week per reset, though Anthropic and replies give it a second apart. |
 | **0.6.0** | **Accounts by name**: each chat asks Anthropic who it is signed in as, and fetches its own account's week, through Claude Code's sealed login handle. |
 | **0.5.0** | **Each account has its own settings.** |
-| **0.4.0** | `/budget` **replies with the numbers**, which a phone on Remote Control shows. Each account's week is kept apart. |
-| **0.3.0** | **A fresh figure without waiting for a reply**: at start-up, on `/budget`, and when the shown one goes stale. |
+| **0.4.0** | `/budget` **replies with the numbers**, which a phone on Remote Control shows. |
+| **0.3.0** | **A fresh figure without waiting for a reply**: at start-up, on `/budget`, and when the shown one goes stale. Each account's week is kept apart. |
 | **0.2.x** | **The desktop app**: a strip above the message box, with ✕ to hide it for a chat and ⚙ for the settings. |
 | **0.1.0** | The plan (pins, an allowance that adds up through the week), the terminal status line in three styles, warn / re-warn / block with snooze and a heads-up, the details and settings panes, the VS Code panel (compact or full), and Leftover: Fixed or Adaptive. |
 
-The design, its rulings and the build plan are in [`docs/superpowers/`](docs/superpowers/).
+Every change, version by version, is in the [changelog](CHANGELOG.md), and each version is a [release](https://github.com/Fafafa12/claude-weekly-budget/releases). The design, its rulings and the build plan are in [`docs/superpowers/`](docs/superpowers/).
 
 ## Where we're stuck (for now)
 
