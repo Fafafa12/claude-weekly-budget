@@ -51,7 +51,7 @@ npx tsx scripts/screens.ts
 
 Redraws `assets/screens/*.svg` from the plugin's own `lib/` (the bar, the status line, the reply and the pace wording) on a made-up week, with the fictional account "Acme (you@acme.dev)". Run it after changing anything they show, and commit the result. Never use real screenshots: they show real accounts.
 
-`assets/cover.png` (1200×630) is the project's cover: the image of the [daily.dev post](https://daily.dev/posts/friday-you-deserves-claude-too-i-built-a-budget-for-your-weekly-limit-gxgpgiqfe), and the repository's social preview (set in GitHub under Settings → General → Social preview). `assets/icon.svg` is the logo.
+`assets/cover.png` (1200×630) is the project's cover: the image of the [daily.dev post](https://dly.to/rKe6INWxwun), and the repository's social preview (set in GitHub under Settings → General → Social preview). `assets/icon.svg` is the logo.
 
 ## Versions
 

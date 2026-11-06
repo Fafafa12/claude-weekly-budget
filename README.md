@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/version-0.7.0-D97757" alt="Version 0.7.0">
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" alt="A Claude Code plugin">
   <img src="https://img.shields.io/badge/license-MIT-8CB88A" alt="MIT license">
-  <a href="https://daily.dev/posts/friday-you-deserves-claude-too-i-built-a-budget-for-your-weekly-limit-gxgpgiqfe"><img src="https://img.shields.io/badge/daily.dev-read%20the%20post-B1ADA1" alt="Read the post on daily.dev"></a>
+  <a href="https://dly.to/rKe6INWxwun"><img src="https://img.shields.io/badge/daily.dev-read%20the%20post-B1ADA1" alt="Read the post on daily.dev"></a>
 </p>
 
 <p align="center">
