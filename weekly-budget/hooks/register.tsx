@@ -1,6 +1,6 @@
 import type { Register } from 'claude-code'
 
-import { ensureCompact, onMeasure, onPrompt, refreshQuietly, runBudgetCommand, showToast } from './controller'
+import { ensureCompact, onMeasure, onPrompt, openSettings, refreshQuietly, runBudgetCommand, showToast } from './controller'
 import { renderCompact } from './ui/compact'
 import { renderDetails } from './ui/details'
 import { renderSettings } from './ui/settings'
@@ -61,8 +61,7 @@ export const register: Register = on => {
   }))
 
   on('command.run', { command: 'budget-config' }, async $ => {
-    // Focused, so that the terminal's keys reach the settings at once.
-    await $.ui.open({ id: 'settings', title: 'Weekly budget settings', focus: true })
+    await openSettings($)
 
     return { text: 'Budget settings opened.' }
   })

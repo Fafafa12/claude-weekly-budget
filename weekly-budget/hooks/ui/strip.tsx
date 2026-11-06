@@ -1,12 +1,12 @@
 import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 
-import { currentBudget, hideStrip, isStripHidden, openDetails } from '../controller'
+import { currentBudget, hideStrip, isStripHidden, openDetails, openSettings } from '../controller'
 import { renderBar, renderSummary } from './shared'
 
 // The desktop app's strip above the message box (its AbovePrompt band): the summary
 // line with a quiet Details link, which opens the details beside the conversation,
-// a ✕ that hides the strip for this chat (/budget shows it again), and the bar under
-// it. Every other surface, a survey that needs the band, and a closed strip get what
+// a ⚙ that opens the settings there, a ✕ that hides the strip for this chat (/budget
+// shows it again), and the bar under it. Every other surface, a survey that needs the band, and a closed strip get what
 // is below this plugin instead.
 export async function renderStrip(
   $: EngineInterface,
@@ -24,6 +24,7 @@ export async function renderStrip(
         {renderSummary($, e, view)}
         <Box flexDirection="row" gap={2}>
           <Button key="strip-details" label="▸ Details" plain dimColor onPress={() => openDetails($)} />
+          <Button key="strip-settings" label="⚙" plain dimColor onPress={() => openSettings($)} />
           <Button key="strip-close" label="✕" plain dimColor onPress={() => hideStrip($)} />
         </Box>
       </Box>

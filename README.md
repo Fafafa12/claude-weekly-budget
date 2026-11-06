@@ -20,7 +20,7 @@ Advanced: `WEEKLY_BUDGET_TZ_OFFSET_MIN` in the environment overrides the time zo
 
 | Command | What it does |
 | --- | --- |
-| `/budget` | In the terminal, opens the details: used, allowed by tonight, today's balance, when the week resets, your plan, the mode and the snooze state, with snooze buttons. In VS Code, opens the budget panel (see below), even if you closed it. |
+| `/budget` | In the terminal, opens the details: used, allowed by tonight, today's balance, when the week resets, your plan, the mode and the snooze state, with snooze buttons. In VS Code, opens the budget panel (see below), even if you closed it. In the desktop app, brings back the strip above the message box if you hid it. |
 | `/budget snooze 30m`, `1h`, `today` or `off` | Snoozes warnings for that long (any number of minutes or hours works), until the end of today, or ends the snooze. |
 | `/budget-config` | Opens the settings: the plan, the leftover, the mode, the heads-up, the snooze durations, the status line style and the VS Code panel's view. See [Settings](#settings). |
 
@@ -88,7 +88,7 @@ Block goes by the highest reading from any of your sessions in the current week,
 
 Claude Code draws the status line itself: it puts "⚠ weekly-budget:" in front and decides the colour, which is why the words and the bar's ▓ (past what the plan allows) carry the state. In the panels the state reads as a coloured word: On track, Running low, Over today. In VS Code the plugin shows the panel and no status line.
 
-**In the Claude desktop app** (its Code tab, on macOS, Windows or the Linux beta), the budget is a thin strip just above the message box: the coloured summary line with a quiet "▸ Details" link, and the bar under it. "▸ Details" and `/budget` open the full details in the panel beside the conversation, and `/budget-config` opens the settings there. No panel opens by itself. The strip's ✕ hides it for that chat (a new chat shows it again), and `/budget` brings it back. Install the plugin from the desktop app's plugin settings, or let it load from a project that has it.
+**In the Claude desktop app** (its Code tab, on macOS, Windows or the Linux beta), the budget is a thin strip just above the message box: the coloured summary line, and the bar under it. At its right end, "▸ Details" opens the full details in the panel beside the conversation, ⚙ opens the settings there, and ✕ hides the strip for that chat (a new chat shows it again). `/budget` brings a hidden strip back, and opens no panel. No panel opens by itself. Install the plugin from the desktop app's plugin settings, or let it load from a project that has it.
 
 Claude Code on the web (claude.ai/code) and the regular Claude chat run no plugins, so the budget can't show there; their usage still counts, and appears here after your next response.
 

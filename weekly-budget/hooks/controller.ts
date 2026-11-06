@@ -330,10 +330,16 @@ export async function showToast($: EngineInterface, toast: Toast): Promise<void>
 // after the person closed it, and the details pane in a terminal; /budget snooze
 // <span> silences warnings and lets messages through. The reply is what the
 // command prints.
-// The details pane: where /budget answers in the terminal and the desktop app, and
-// what the desktop strip's Details link opens (beside the conversation there).
+// The details pane: where /budget answers in the terminal, and what the desktop
+// strip's Details link opens (beside the conversation there).
 export async function openDetails($: EngineInterface): Promise<void> {
   await $.ui.open({ id: 'details', title: 'Weekly budget' })
+}
+
+// The settings pane, for /budget-config and the desktop strip's ⚙. Focused, so that
+// the terminal's keys reach the settings at once.
+export async function openSettings($: EngineInterface): Promise<void> {
+  await $.ui.open({ id: 'settings', title: 'Weekly budget settings', focus: true })
 }
 
 export async function runBudgetCommand($: EngineInterface, args: string): Promise<string> {
@@ -346,10 +352,14 @@ export async function runBudgetCommand($: EngineInterface, args: string): Promis
       await openCompact($, await currentCompactPane($).catch(() => plain))
       return 'Budget panel opened.'
     }
-    // A strip closed in this chat comes back with the details.
-    if (await read($, stripHiddenAtom)) {
-      await update($, stripHiddenAtom, () => false)
-      $.ui.invalidate('ui.render')
+    // The desktop app's answer is its strip: one closed in this chat comes back, and
+    // no panel opens (the details are a click away on the strip).
+    if ((await $.session.surfaces()).includes('desktop')) {
+      if (await read($, stripHiddenAtom)) {
+        await update($, stripHiddenAtom, () => false)
+        $.ui.invalidate('ui.render')
+      }
+      return 'Budget strip shown.'
     }
     await openDetails($)
     return 'Budget details opened.'

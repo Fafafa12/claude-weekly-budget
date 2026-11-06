@@ -841,13 +841,13 @@ test('on the desktop no panel opens by itself: the strip is there instead', asyn
   expect(calls.opens).toEqual([])
 })
 
-test('/budget on the desktop opens the details in the side panel', async ($, on) => {
+test('/budget on the desktop opens no panel: the strip is the answer there', async ($, on) => {
   const { calls } = engine(on, { store: { config: pinned, lastReading: reading(33) }, surfaces: ['desktop'] })
 
   const result = await run($, 'budget')
 
-  expect(result.text).toBe('Budget details opened.')
-  expect(calls.opens).toEqual([{ id: 'details', title: 'Weekly budget' }])
+  expect(result.text).toBe('Budget strip shown.')
+  expect(calls.opens).toEqual([])
 })
 
 // The desktop app draws no fold mark for the strip, so it has its own ✕: hidden for
@@ -878,7 +878,7 @@ test('closing the strip hides it for the chat', async ($, on) => {
   await ui.unmount()
 })
 
-test('/budget brings the closed strip back, and opens the details', async ($, on) => {
+test('/budget brings the closed strip back, and opens nothing', async ($, on) => {
   const { calls } = engine(on, { store: { config: pinned, lastReading: reading(33) }, surfaces: ['desktop'] })
   engineBelow(on)
   const ui = await $.ui.mount({ ...STRIP, surface: 'desktop' })
@@ -886,8 +886,32 @@ test('/budget brings the closed strip back, and opens the details', async ($, on
 
   const result = await run($, 'budget')
 
-  expect(result.text).toBe('Budget details opened.')
-  expect(calls.opens).toEqual([{ id: 'details', title: 'Weekly budget' }])
+  expect(result.text).toBe('Budget strip shown.')
+  expect(calls.opens).toEqual([])
   expect(await ui.find({ key: 'strip-details' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the strip ends with Details, a settings button and the close button', async ($, on) => {
+  engine(on, { store: { config: pinned, lastReading: reading(33) } })
+  const ui = await $.ui.mount({ ...STRIP, surface: 'desktop' })
+
+  const buttons = await ui.findAll({ type: 'Button' })
+  expect(buttons.map(b => [b.key, b.props.label])).toEqual([
+    ['strip-details', '▸ Details'],
+    ['strip-settings', '⚙'],
+    ['strip-close', '✕'],
+  ])
+  expect((await ui.find({ key: 'strip-settings' }))?.props).toMatchObject({ plain: true, dimColor: true })
+  await ui.unmount()
+})
+
+test("the strip's settings button opens the settings beside the conversation", async ($, on) => {
+  const { calls } = engine(on, { store: { config: pinned, lastReading: reading(33) }, surfaces: ['desktop'] })
+  const ui = await $.ui.mount({ ...STRIP, surface: 'desktop' })
+
+  await ui.press({ key: 'strip-settings' })
+
+  expect(calls.opens).toEqual([{ id: 'settings', title: 'Weekly budget settings', focus: true }])
   await ui.unmount()
 })
