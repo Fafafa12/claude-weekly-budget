@@ -17,6 +17,9 @@ const pinned: Config = { ...DEFAULT_CONFIG, pins: [{ days: [6, 0], percent: 10 }
 const tz = fixedOffsetTz(180)
 const budgetAt = (used: number) =>
   computeBudget({ percentUsed: used, resetsMs: reset, at: now }, pinned, now, tz)
+// What /budget replies: the numbers, in words, which the phone shows too.
+const REPLY_33 = '33% of 39% · 6% left today · resets Tue 20:00'
+
 // The host draws the header in plain text, so it only names the panel: the summary,
 // coloured, is the panel's first line.
 const TITLE = 'Weekly budget'
@@ -575,7 +578,7 @@ test('/budget in VS Code reopens the panel the person closed', async ($, on) => 
 
   const result = await run($, 'budget')
 
-  expect(result.text).toBe('Budget panel opened.')
+  expect(result.text).toBe(REPLY_33)
   expect(calls.opens).toHaveLength(2)
   expect(calls.opens.at(-1)).toEqual({ id: 'compact', title: TITLE, rows: COLLAPSED_ROWS })
   expect(calls.opens.map(open => open.id)).not.toContain('details')
@@ -590,7 +593,7 @@ test('/budget opens the panel in the full view, tall enough for the details', as
 
   const result = await run($, 'budget')
 
-  expect(result.text).toBe('Budget panel opened.')
+  expect(result.text).toBe(REPLY_33)
   expect(calls.opens).toEqual([{ id: 'compact', title: TITLE, rows: EXPANDED_ROWS }])
 })
 
@@ -602,7 +605,7 @@ test('/budget opens the panel beside a terminal too', async ($, on) => {
 
   const result = await run($, 'budget')
 
-  expect(result.text).toBe('Budget panel opened.')
+  expect(result.text).toBe(REPLY_33)
   expect(calls.opens.map(open => open.id)).toEqual(['compact'])
 })
 
@@ -611,7 +614,7 @@ test('/budget in a terminal opens the details pane, not the panel', async ($, on
 
   const result = await run($, 'budget')
 
-  expect(result.text).toBe('Budget details opened.')
+  expect(result.text).toBe(REPLY_33)
   expect(calls.opens).toEqual([{ id: 'details', title: 'Weekly budget' }])
 })
 
@@ -846,7 +849,7 @@ test('/budget on the desktop opens no panel: the strip is the answer there', asy
 
   const result = await run($, 'budget')
 
-  expect(result.text).toBe('Budget strip shown.')
+  expect(result.text).toBe(REPLY_33)
   expect(calls.opens).toEqual([])
 })
 
@@ -886,7 +889,7 @@ test('/budget brings the closed strip back, and opens nothing', async ($, on) =>
 
   const result = await run($, 'budget')
 
-  expect(result.text).toBe('Budget strip shown.')
+  expect(result.text).toBe(REPLY_33)
   expect(calls.opens).toEqual([])
   expect(await ui.find({ key: 'strip-details' })).toBeDefined()
   await ui.unmount()

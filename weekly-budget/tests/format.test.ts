@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { DEFAULT_CONFIG } from '../hooks/lib/config'
 import type { Config } from '../hooks/lib/config'
-import { countdown, paneTitle, pct, stateLabel, statusLine, textBar, todayText } from '../hooks/lib/format'
+import { budgetReply, countdown, paneTitle, pct, stateLabel, statusLine, textBar, todayText } from '../hooks/lib/format'
 import { computeBudget } from '../hooks/lib/plan'
 import { fixedOffsetTz } from '../hooks/lib/tz'
 
@@ -172,4 +172,12 @@ test('no line or title carries a coloured dot', async () => {
     }
     expect(paneTitle(at(used), null, tz, now)).not.toMatch(dots)
   }
+})
+
+test('budgetReply says where the week stands, in one line', async () => {
+  expect(budgetReply(at(33), null, tz, now)).toBe('33% of 39% · 6% left today · resets Tue 20:00')
+  expect(budgetReply(at(43), null, tz, now)).toBe('43% of 39% · 4% over today · resets Tue 20:00')
+  expect(budgetReply(at(100), null, tz, now)).toBe('100% of 39% · weekly limit reached · resets Tue 20:00')
+  expect(budgetReply(at(33), now - HOUR_MS, tz, now)).toBe('33% of 39% · 6% left today · resets Tue 20:00 · as of 14:00')
+  expect(budgetReply(null, null, tz, now)).toBe('Weekly budget: no reading yet — send a message')
 })

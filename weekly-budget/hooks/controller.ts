@@ -3,7 +3,7 @@ import type { EngineInterface, PromptSubmitInput, SessionRateLimit, UsageUnit } 
 
 import { validatePins } from './lib/config'
 import type { Config } from './lib/config'
-import { staleMark, statusLine } from './lib/format'
+import { budgetReply, staleMark, statusLine } from './lib/format'
 import { computeBudget, nextDayStart, readingFrom, usageAtDayStart } from './lib/plan'
 import { matchWeek, PROBE_ARGV, PROBE_ENV, parseUsageWeek, probedReading, shouldProbe } from './lib/probe'
 import type { Budget, Reading } from './lib/plan'
@@ -414,29 +414,41 @@ export async function openSettings($: EngineInterface): Promise<void> {
   await $.ui.open({ id: 'settings', title: 'Weekly budget settings', focus: true })
 }
 
+// What /budget shows, as each surface has it: VS Code's panel (opened even if it was
+// closed), the desktop app's strip (brought back if it was hidden), the terminal's
+// details pane. Says what it did, for a reply when the numbers can't be read.
+async function showBudget($: EngineInterface): Promise<string> {
+  const surfaces = await $.session.surfaces()
+  if (hasPanelSurface(surfaces)) {
+    // The panel is how /budget answers here, so a store that cannot be read still
+    // opens it, plainly titled and collapsed.
+    const plain = { id: COMPACT, title: COMPACT_TITLE, rows: COLLAPSED_ROWS }
+    await openCompact($, await currentCompactPane($).catch(() => plain))
+    return 'Budget panel opened.'
+  }
+  if (surfaces.includes('desktop')) {
+    if (await read($, stripHiddenAtom)) {
+      await update($, stripHiddenAtom, () => false)
+      $.ui.invalidate('ui.render')
+    }
+    return 'Budget strip shown.'
+  }
+  await openDetails($)
+  return 'Budget details opened.'
+}
+
 export async function runBudgetCommand($: EngineInterface, args: string): Promise<string> {
   const text = args.trim().toLowerCase()
   if (text === '') {
-    // Asked to show the budget: fetch a fresh figure meanwhile, without waiting for a reply.
-    void probeUsageQuietly($, true)
-    if (hasPanelSurface(await $.session.surfaces())) {
-      // The panel is how /budget answers here, so a store that cannot be read still
-      // opens it, plainly titled and collapsed.
-      const plain = { id: COMPACT, title: COMPACT_TITLE, rows: COLLAPSED_ROWS }
-      await openCompact($, await currentCompactPane($).catch(() => plain))
-      return 'Budget panel opened.'
+    const done = await showBudget($)
+    // A fresh figure for the reply, without waiting for a reply of Claude's.
+    await probeUsageQuietly($, true)
+    try {
+      const { budget, staleSince, tz, now } = await loadView($)
+      return budgetReply(budget, staleSince, tz, now)
+    } catch {
+      return done
     }
-    // The desktop app's answer is its strip: one closed in this chat comes back, and
-    // no panel opens (the details are a click away on the strip).
-    if ((await $.session.surfaces()).includes('desktop')) {
-      if (await read($, stripHiddenAtom)) {
-        await update($, stripHiddenAtom, () => false)
-        $.ui.invalidate('ui.render')
-      }
-      return 'Budget strip shown.'
-    }
-    await openDetails($)
-    return 'Budget details opened.'
   }
   if (text === 'snooze' || text.startsWith('snooze ')) {
     const [now, tz] = await Promise.all([$.clock.now(), resolveTz($)])

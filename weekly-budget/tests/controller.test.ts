@@ -495,7 +495,7 @@ test('/budget opens the details pane', async ($, on) => {
 
   const result = await run($, 'budget', '')
 
-  expect(result.text).toBe('Budget details opened.')
+  expect(result.text).toBe('Weekly budget: no reading yet — send a message')
   expect(calls.opens).toEqual([{ id: 'details', title: 'Weekly budget' }])
 })
 
@@ -970,4 +970,23 @@ test("/usage updates the week whose reset it names, not another account's chat",
   expect(calls.probes).toHaveLength(1)
   expect(await storedReading($)).toEqual({ percentUsed: 48, resetsMs: reset, at: now })
   expect(calls.statuses.at(-1)).toContain('Week 3% /')
+})
+
+// /budget answers with the numbers themselves, so that a phone driving this session
+// (Remote Control), which shows replies but no panels, sees where the week stands.
+test('/budget replies with the numbers, marked last known when they are', async ($, on) => {
+  const { clock } = engine(on, { store: { config: pinned, lastReading: reading(33, now - HOUR_MS) } })
+  await start($, clock)
+
+  expect((await run($, 'budget', '')).text).toBe('33% of 39% · 6% left today · resets Tue 20:00 · as of 14:00')
+})
+
+test('/budget replies with the fresh figure /usage gave', async ($, on) => {
+  const { clock } = engine(on, {
+    store: { ...shown, lastReading: reading(45, halfHourAgo), probeAt: { at: now - 5 * 60e3 } },
+    usage: USAGE_48,
+  })
+  await start($, clock)
+
+  expect((await run($, 'budget', '')).text).toBe('48% of 39% · 9% over today · resets Tue 20:00')
 })

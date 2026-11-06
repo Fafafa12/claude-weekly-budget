@@ -111,3 +111,12 @@ export function paneTitle(b: Budget | null, staleSince: number | null, tz: Tz, n
   const summary = `${pct(b.used)}% of ${pct(b.allowed)}% · ${todayText(b)}`
   return `${summary}${staleMark(staleSince, tz, now)}`
 }
+
+// What /budget replies, in one line of words: the used figure, what the plan allows
+// by tonight, today's balance and the reset, marked when the reading is last known.
+// A phone driving the session (Remote Control) shows replies but no panels.
+export function budgetReply(b: Budget | null, staleSince: number | null, tz: Tz, now: number): string {
+  if (b === null) return NO_READING
+  const resets = `resets ${DAY_NAMES[tz.weekday(b.resetMs)]} ${tz.hhmm(b.resetMs)}`
+  return `${pct(b.used)}% of ${pct(b.allowed)}% · ${todayText(b)} · ${resets}${staleMark(staleSince, tz, now)}`
+}
