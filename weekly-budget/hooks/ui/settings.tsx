@@ -12,7 +12,7 @@ import {
 import { DAY_NAMES } from '../lib/config'
 import type { Config, Leftover, Mode, Pin, StatusStyle, Weekday } from '../lib/config'
 import type { Tz } from '../lib/tz'
-import { pct } from '../lib/format'
+import { LEFTOVER_LABELS, MODE_LABELS, pct } from '../lib/format'
 import { planLine } from './shared'
 
 type Choice<V extends string = string> = { value: V; label: string }
@@ -32,11 +32,8 @@ const PIN_GROUPS: readonly PinGroup[] = [
   { value: 'sun', label: 'Sun', days: [0] },
 ]
 
-const MODES: readonly Choice<Mode>[] = [
-  { value: 'warn', label: 'Warn once' },
-  { value: 'rewarn', label: 'Every message' },
-  { value: 'block', label: 'Block' },
-]
+// In the order the settings show them, worded as the details show them (MODE_LABELS).
+const MODES: readonly Choice<Mode>[] = (['warn', 'rewarn', 'block'] as const).map(value => ({ value, label: MODE_LABELS[value] }))
 
 // The heads-up is on at one of these fractions of today's share still left, or off.
 const HEADS_UPS: readonly (Choice & { fraction: number | null })[] = [
@@ -54,10 +51,10 @@ const STYLES: readonly Choice<StatusStyle>[] = [
 
 // What a day's unused share, or its overuse, does: land on the next day, or spread
 // over the unpinned days still ahead.
-const LEFTOVERS: readonly Choice<Leftover>[] = [
-  { value: 'fixed', label: 'Fixed' },
-  { value: 'adaptive', label: 'Adaptive' },
-]
+const LEFTOVERS: readonly Choice<Leftover>[] = (['fixed', 'adaptive'] as const).map(value => ({
+  value,
+  label: LEFTOVER_LABELS[value],
+}))
 
 const PANEL: readonly Choice[] = [
   { value: 'on', label: 'On' },

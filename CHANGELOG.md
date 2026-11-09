@@ -4,6 +4,11 @@ Every version of weekly-budget, newest first. Each one is also a [release on Git
 
 To update an installed copy, run `claude plugin marketplace update weekly-budget`, then `claude plugin update weekly-budget@weekly-budget`, and restart your Claude apps.
 
+## 0.7.2 · 2026-11-09
+
+### Changed
+- **The details use the settings' words.** They say "Mode: Warn once", "Every message" or "Block", and "Leftover: Fixed" or "Adaptive", as the settings do, instead of the internal names ("warn", "re-warn", "fixed", "adaptive").
+
 ## 0.7.1 · 2026-11-09
 
 ### Fixed

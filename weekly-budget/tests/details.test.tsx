@@ -85,7 +85,7 @@ for (const surface of SURFACES) {
     expect((await ui.find({ type: 'Text', text: /Sat 5 · Sun 5/ }))?.text).toBe(
       'Plan: Mon 18 · Tue 18 · Wed 18 · Thu 18 · Fri 18 · Sat 5 · Sun 5',
     )
-    expect((await ui.find({ type: 'Text', text: /Mode/ }))?.text).toBe('Mode: warn')
+    expect((await ui.find({ type: 'Text', text: /Mode/ }))?.text).toBe('Mode: Warn once')
     expect((await ui.find({ type: 'Text', text: /Warnings/ }))?.text).toBe('Warnings on')
     await ui.unmount()
   })
@@ -262,7 +262,7 @@ test('a snooze that has run out counts as off', async ($, on) => {
   await ui.unmount()
 })
 
-const MODE_TEXT = { warn: 'Mode: warn', rewarn: 'Mode: re-warn', block: 'Mode: block' } as const
+const MODE_TEXT = { warn: 'Mode: Warn once', rewarn: 'Mode: Every message', block: 'Mode: Block' } as const
 for (const mode of ['warn', 'rewarn', 'block'] as const) {
   test(`the ${mode} mode is shown as ${MODE_TEXT[mode]}`, async ($, on) => {
     engine(on, { store: { config: { ...pinned, mode }, lastReading: reading(33) } })
@@ -373,14 +373,18 @@ for (const surface of SURFACES) {
   })
 }
 
+// In the settings' own words, so the details say what the settings do.
+const LEFTOVER_TEXT = { fixed: 'Leftover: Fixed', adaptive: 'Leftover: Adaptive' } as const
 for (const surface of SURFACES) {
-  test(`the leftover setting is shown on ${surface}`, async ($, on) => {
-    engine(on, { store: { config: { ...pinned, leftover: 'adaptive' }, lastReading: reading(33) } })
-    const ui = await $.ui.mount({ ...PANE, surface })
+  for (const leftover of ['fixed', 'adaptive'] as const) {
+    test(`the ${leftover} leftover is shown as ${LEFTOVER_TEXT[leftover]} on ${surface}`, async ($, on) => {
+      engine(on, { store: { config: { ...pinned, leftover }, lastReading: reading(33) } })
+      const ui = await $.ui.mount({ ...PANE, surface })
 
-    expect((await ui.find({ type: 'Text', text: /^Leftover:/ }))?.text).toBe('Leftover: adaptive')
-    await ui.unmount()
-  })
+      expect((await ui.find({ type: 'Text', text: /^Leftover:/ }))?.text).toBe(LEFTOVER_TEXT[leftover])
+      await ui.unmount()
+    })
+  }
 }
 
 const named = {

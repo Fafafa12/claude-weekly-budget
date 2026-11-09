@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.7.1-D97757" alt="Version 0.7.1">
+  <img src="https://img.shields.io/badge/version-0.7.2-D97757" alt="Version 0.7.2">
   <img src="https://img.shields.io/badge/Claude%20Code-plugin-D97757" alt="A Claude Code plugin">
   <img src="https://img.shields.io/badge/license-MIT-8CB88A" alt="MIT license">
   <a href="https://dly.to/rKe6INWxwun"><img src="https://img.shields.io/badge/daily.dev-read%20the%20post-B1ADA1" alt="Read the post on daily.dev"></a>
@@ -221,6 +221,7 @@ Something not working? See [Troubleshooting](docs/troubleshooting.md).
 
 | Version | What came in |
 | --- | --- |
+| **0.7.2** | The details name the mode and the leftover in the settings' words ("Warn once", "Adaptive"), not the internal ones. |
 | **0.7.1** | The figure catches up a few seconds after each reply, instead of staying one reply behind until `/budget`. |
 | **0.7.0** | **Pace forecast** in the details: when today's share runs out, and whether the week lasts. This README, with its tour. |
 | **0.6.1** | The desktop app names its account too (its chats start without a screen; the window arriving now counts). One week per reset, though Anthropic and replies give it a second apart. |

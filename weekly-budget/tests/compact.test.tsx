@@ -173,7 +173,7 @@ test('the toggle expands the details under the bar, and collapses them again', a
   expect((await ui.find({ type: 'Text', text: /Plan:/ }))?.text).toBe(
     'Plan: Mon 18 · Tue 18 · Wed 18 · Thu 18 · Fri 18 · Sat 5 · Sun 5',
   )
-  expect((await ui.find({ type: 'Text', text: /Mode:/ }))?.text).toBe('Mode: warn')
+  expect((await ui.find({ type: 'Text', text: /Mode:/ }))?.text).toBe('Mode: Warn once')
   expect((await ui.find({ type: 'Text', text: /Warnings/ }))?.text).toBe('Warnings on')
   expect((await ui.find({ key: 'snooze-60' }))?.props.label).toBe('Snooze 1h')
   expect((await ui.find({ key: 'snooze-today' }))?.props.label).toBe('Snooze today')
@@ -265,7 +265,7 @@ test('full view: the bar and the details, with no toggle', async ($, on) => {
   expect(await ui.findAll({ type: 'Svg' })).toHaveLength(1)
   expect((await ui.find({ type: 'Text', text: /Used 33%/ }))?.text).toBe('Used 33%')
   expect((await ui.find({ type: 'Text', text: /Plan:/ }))?.text).toContain('Sat 5 · Sun 5')
-  expect((await ui.find({ type: 'Text', text: /Mode:/ }))?.text).toBe('Mode: warn')
+  expect((await ui.find({ type: 'Text', text: /Mode:/ }))?.text).toBe('Mode: Warn once')
   expect((await ui.find({ key: 'snooze-today' }))?.props.label).toBe('Snooze today')
   expect(await ui.find({ key: 'details-toggle' })).toBeUndefined()
   await ui.unmount()
@@ -325,7 +325,7 @@ test('with no reading the expanded pane still has the plan, the mode and the sno
 
   expect(await ui.find({ type: 'Text', text: /No weekly reading yet/ })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /Plan:/ }))?.text).toContain('Sat 5 · Sun 5')
-  expect((await ui.find({ type: 'Text', text: /Mode:/ }))?.text).toBe('Mode: warn')
+  expect((await ui.find({ type: 'Text', text: /Mode:/ }))?.text).toBe('Mode: Warn once')
   expect((await ui.find({ key: 'snooze-60' }))?.props.label).toBe('Snooze 1h')
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Used|Allowed|Resets/ })).toBeUndefined()

@@ -1,5 +1,5 @@
 import { DAY_NAMES } from './config'
-import type { StatusStyle } from './config'
+import type { Leftover, Mode, StatusStyle } from './config'
 import { OVER_MARGIN } from './plan'
 import type { Budget, BudgetState } from './plan'
 import type { Tz } from './tz'
@@ -9,6 +9,11 @@ const HOUR_MS = 60 * MIN_MS
 const DAY_MS = 24 * HOUR_MS
 
 const NO_READING = 'Weekly budget: no reading yet — send a message'
+
+// The mode and the leftover in the settings' own words, so that the details say what
+// the settings do.
+export const MODE_LABELS: Readonly<Record<Mode, string>> = { warn: 'Warn once', rewarn: 'Every message', block: 'Block' }
+export const LEFTOVER_LABELS: Readonly<Record<Leftover, string>> = { fixed: 'Fixed', adaptive: 'Adaptive' }
 
 // One decimal, with a trailing ".0" dropped: 39 -> "39", 28.571 -> "28.6".
 export function pct(n: number): string {

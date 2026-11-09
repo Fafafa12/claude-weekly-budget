@@ -12,7 +12,7 @@ import { DAY_NAMES, DEFAULT_CONFIG, dayShares } from '../weekly-budget/hooks/lib
 import type { Config, Weekday } from '../weekly-budget/hooks/lib/config'
 import { todayForecast, todayPaceLine, weekForecast, weekPaceLine } from '../weekly-budget/hooks/lib/forecast'
 import type { PaceLine } from '../weekly-budget/hooks/lib/forecast'
-import { budgetReply, countdown, pct, stateLabel, statusLine, todayText } from '../weekly-budget/hooks/lib/format'
+import { budgetReply, countdown, LEFTOVER_LABELS, MODE_LABELS, pct, stateLabel, statusLine, todayText } from '../weekly-budget/hooks/lib/format'
 import { computeBudget } from '../weekly-budget/hooks/lib/plan'
 import { barSegments, barSvg, COLORS, MIN_LABEL_SHARE } from '../weekly-budget/hooks/lib/svg'
 import { fixedOffsetTz } from '../weekly-budget/hooks/lib/tz'
@@ -40,6 +40,8 @@ const status = statusLine(budget, 'B', null, tz, now)
 const MON_TO_SUN: readonly Weekday[] = [1, 2, 3, 4, 5, 6, 0]
 const shares = dayShares(cfg.pins)
 const plan = `Plan: ${MON_TO_SUN.map(d => `${DAY_NAMES[d]} ${pct(shares[d] ?? 0)}`).join(' · ')}`
+const mode = `Mode: ${MODE_LABELS[cfg.mode]}`
+const leftover = `Leftover: ${LEFTOVER_LABELS[cfg.leftover]}`
 const resets = `Resets ${DAY_NAMES[tz.weekday(reset)]} ${tz.hhmm(reset)} (in ${countdown(reset - now)})`
 
 // ── Claude's dark theme, as the apps draw it.
@@ -197,8 +199,8 @@ function terminal(): string {
     [{ t: resets, fill: C.claude }],
     [],
     [{ t: plan }],
-    [{ t: 'Mode: warn' }],
-    [{ t: 'Leftover: fixed' }],
+    [{ t: mode }],
+    [{ t: leftover }],
     [],
     [{ t: 'Warnings on' }],
   ]
@@ -264,8 +266,8 @@ function vscode(): string {
   if (paceWeek !== null) add(paceRuns('Pace week', paceWeek), {}, 30)
   add(resets, { fill: C.claude }, 30)
   add(plan)
-  add('Mode: warn')
-  add('Leftover: fixed', {}, 30)
+  add(mode)
+  add(leftover, {}, 30)
   add('Warnings on', {}, 12)
   const b1 = button(BX, y, 'Snooze 1h')
   const b2 = button(BX + b1.w + 8, y, 'Snooze today')

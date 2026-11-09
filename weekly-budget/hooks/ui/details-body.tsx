@@ -3,14 +3,11 @@ import type { EngineInterface, RenderElement, RenderInput } from 'claude-code'
 import { applySnooze, resolveTz } from '../controller'
 import type { currentBudget } from '../controller'
 import { DAY_NAMES } from '../lib/config'
-import type { Config } from '../lib/config'
 import type { PaceLine } from '../lib/forecast'
-import { asOf, countdown, pct, todayText } from '../lib/format'
+import { asOf, countdown, LEFTOVER_LABELS, MODE_LABELS, pct, todayText } from '../lib/format'
 import { planLine, STATE_COLORS } from './shared'
 
 const MIN_MS = 60_000
-
-const MODE_NAMES: Record<Config['mode'], string> = { warn: 'warn', rewarn: 're-warn', block: 'block' }
 
 // Where the budget stands, as `currentBudget` has it.
 export type BudgetView = Awaited<ReturnType<typeof currentBudget>>
@@ -82,8 +79,8 @@ export function renderDetailsBody(
       )}
       <Box flexDirection="column">
         <Text>{planLine(cfg)}</Text>
-        <Text>{`Mode: ${MODE_NAMES[cfg.mode]}`}</Text>
-        <Text>{`Leftover: ${cfg.leftover}`}</Text>
+        <Text>{`Mode: ${MODE_LABELS[cfg.mode]}`}</Text>
+        <Text>{`Leftover: ${LEFTOVER_LABELS[cfg.leftover]}`}</Text>
       </Box>
       <Box flexDirection="column">
         <Text>{isSnoozed ? `Warnings snoozed until ${tz.hhmm(snoozedUntil)}` : 'Warnings on'}</Text>
