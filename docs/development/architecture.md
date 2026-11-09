@@ -29,7 +29,9 @@ weekly-budget/
     settings.tsx                   the settings pane
     shared.tsx                     the bar, the summary, the state colours
   types/index.d.ts                 the type contract: the plugin's $.state values
-  tests/                           the suite, one file per lib or ui module, plus the controller
+  tests/                           the suite: a file per lib module (config and tz are run
+                                   through the others), one per pane (the strip is in
+                                   compact's), and the controller
 scripts/screens.ts                 draws the README's pictures from lib/
 ```
 

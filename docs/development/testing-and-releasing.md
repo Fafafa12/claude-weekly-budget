@@ -16,7 +16,7 @@ claude --plugin-dir ./weekly-budget
 claude plugin test weekly-budget
 ```
 
-Run from the repository root. About 400 tests, a minute or so. They need no Claude login: the test kit (`claude-code/testing`) runs the hooks against a faked engine.
+Run from the repository root. About 400 tests, two minutes or so. They need no Claude login: the test kit (`claude-code/testing`) runs the hooks against a faked engine.
 
 - **`lib/` tests** call the pure functions directly with a fixed `now` and a fixed time zone (`fixedOffsetTz(180)`).
 - **`ui/` tests** mount a pane (`$.ui.mount`), then `find`, `findAll` and `press` its elements, for each surface.
