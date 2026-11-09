@@ -23,9 +23,9 @@ Until a chat on an account has asked, that account is named by when its week res
 
 | Source | When | Notes |
 | --- | --- | --- |
-| **Claude Code itself** | after every response | The usage Claude Code reports with each reply: the most direct figure. |
-| **Anthropic, with the chat's own login** | when a chat starts or its app's window connects, when you run `/budget`, and when the figure shown is over 15 minutes old | At most once every 10 minutes per account across all your chats, or every 30 seconds for `/budget`. |
-| **Claude Code's `/usage`**, as a fallback | the same moments, if Anthropic didn't answer | Runs `claude -p --no-session-persistence --strict-mcp-config /usage` in the background: a few seconds, nothing sent to the model, not saved as a session. It goes by the terminal's login, so it only updates a week the plugin already knows, matched by its reset time. |
+| **Claude Code itself** | after every response | The usage Claude Code reports with each reply. It comes with the response's headers, which are sent before the response is counted, so on its own it runs one reply behind. |
+| **Anthropic, with the chat's own login** | 10 seconds after each of your turns ends, when a chat starts or its app's window connects, when you run `/budget`, and when the figure shown is over 15 minutes old | The exact figure. At most every 30 seconds per account after a turn or for `/budget`, otherwise every 10 minutes, across all your chats. |
+| **Claude Code's `/usage`**, as a fallback | the same moments except after a turn, if Anthropic didn't answer | Runs `claude -p --no-session-persistence --strict-mcp-config /usage` in the background: a few seconds, nothing sent to the model, not saved as a session. It goes by the terminal's login, so it only updates a week the plugin already knows, matched by its reset time. |
 
 If none of them answers, the plugin waits for your next response.
 

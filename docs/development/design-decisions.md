@@ -51,6 +51,7 @@ See, at any moment, how the week is going against **your own plan** for spreadin
 ## Figures and accounts
 
 - **Fresh figures without waiting for a reply**: a chat that just opened, or a figure gone stale, shouldn't need a message to update. In order: Anthropic's usage address with the chat's own login, then Claude Code's `/usage`, then waiting.
+- **After each turn, the exact figure.** A reply's own figure comes with its headers, sent before that reply is counted, so it lags one reply: left alone, the panel showed usage as it was before the last reply. Ten seconds after a main-loop turn that cost something, the account's figure is fetched from Anthropic (never `/usage`, which would spawn a process per turn), at most every 30 seconds per account.
 - **Only sessions a person drives fetch.** A script shouldn't trigger network calls or subprocesses. The desktop app's sessions start looking like scripts (SDK-driven, no surface), so the first app window to attach marks them as driven.
 - **Throttled across sessions**: once every 10 minutes per account, every 30 seconds for `/budget`, recorded in the store so ten open chats don't fetch ten times.
 - **Weeks are keyed by their reset time, rounded to the minute.** No session can see which account another is on, but each account's week resets at its own time. Rounding matters: replies say 20:00:00 where Anthropic says 19:59:59.7 for the same week.

@@ -487,6 +487,25 @@ export async function probeUsage($: EngineInterface, isAsked: boolean): Promise<
   await refresh($)
 }
 
+// After a turn: the figure its replies brought was read before they were counted, so
+// the account's exact one is fetched (lib/probe.ts's AFTER_TURN_MS later), and the
+// displays move with it. Anthropic's address only, at most every 30 seconds per
+// account: no /usage run after every turn.
+export async function refreshAfterTurn($: EngineInterface): Promise<void> {
+  if ((await $.env.get('WEEKLY_BUDGET_PROBE')) !== undefined) return
+  if (!(await read($, interactiveAtom))) return
+  const account = await identifyAccount($).catch(() => null)
+  if (account === null) return
+  const now = await $.clock.now()
+  if (!shouldProbe(await loadProbeAt($, account.id), now, true)) return
+  await saveProbeAt($, account.id, now)
+  if (await fetchOwnWeek($).catch(() => false)) await refresh($)
+}
+
+export async function refreshAfterTurnQuietly($: EngineInterface): Promise<void> {
+  await refreshAfterTurn($).catch(() => {})
+}
+
 export async function probeUsageQuietly($: EngineInterface, isAsked: boolean): Promise<void> {
   await probeUsage($, isAsked).catch(() => {})
 }

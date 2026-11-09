@@ -13,6 +13,10 @@ The plugin has no figure for this account's week yet.
 
 The figure is over 15 minutes old: no response came since, and the fresh fetch didn't answer. Run `/budget` to fetch one now. If it keeps happening, the plugin is falling back to waiting for responses; everything still works, just less fresh.
 
+## The figure doesn't move right after a reply
+
+A reply's own figure is read before that reply is counted, so it runs one reply behind. From 0.7.1, the plugin fetches the exact figure 10 seconds after each of your turns ends, and the panel, strip and status line move then. On 0.7.0 or earlier, run `/budget` to catch up, or [update](getting-started.md#update).
+
 ## The settings say "the account whose week resets Tue 20:00" instead of a name
 
 No chat on that account has asked Anthropic who it is yet.

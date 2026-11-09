@@ -21,6 +21,11 @@ const MIN_MS = 60_000
 const EVERY_MS = 10 * MIN_MS // on its own: a start, a stale reading
 const ASKED_EVERY_MS = 30_000 // when /budget asks for it
 
+// How long after a turn ends its account's figure is fetched: a reply's own figure
+// comes with its response's headers, sent before that response is counted, so it is
+// one turn behind; Anthropic needs a moment to count the turn.
+export const AFTER_TURN_MS = 10_000
+
 const WEEK_LINE = /^Current week \(all models\):\s*(\d+(?:\.\d+)?)%\s*used/m
 
 // "Current week (all models): 48% used · resets …" → 48.

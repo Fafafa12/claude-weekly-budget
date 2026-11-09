@@ -4,6 +4,11 @@ Every version of weekly-budget, newest first. Each one is also a [release on Git
 
 To update an installed copy, run `claude plugin marketplace update weekly-budget`, then `claude plugin update weekly-budget@weekly-budget`, and restart your Claude apps.
 
+## 0.7.1 · 2026-11-09
+
+### Fixed
+- **The figure catches up after each reply.** The weekly figure a reply brings comes with its response's headers, which are sent before that response is counted, so the VS Code panel, the desktop strip and the status line stayed one reply behind until `/budget` fetched the exact figure. Now, 10 seconds after each of your turns ends, the account's exact figure is fetched from Anthropic (at most every 30 seconds per account; subagents' turns and turns that cost nothing don't count).
+
 ## 0.7.0 · 2026-11-06
 
 ### Added

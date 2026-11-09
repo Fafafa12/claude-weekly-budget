@@ -42,6 +42,7 @@ The split matters: `lib/` is plain functions over plain values, tested directly;
 | `session.start` | Registers `/budget` and `/budget-config`; records whether a person drives the session and where it draws; starts a 60-second tick; refreshes the displays; opens VS Code's panel; fetches a fresh figure. |
 | `session.attach` | A client (an app window, a phone) attached. The first one names the surface of a session that started with none, and makes it one someone drives, which fetches a fresh figure then (this is how the desktop app's chats get going). Then refreshes and opens VS Code's panel if needed. |
 | `session.measure` | Claude Code reports usage after a response: the weekly figure is accepted (see below) and the displays refreshed. |
+| `turn.complete` | A turn of the main loop ended and cost something: 10 seconds later, the account's exact figure is fetched, since the replies' own figures were read before they were counted. |
 | `prompt.submit` | Decides whether the message is gated: a block drops it with a reason, a re-warn shows a toast. If the hook fails, the message goes through. |
 | `ui.render` | Draws VS Code's panel (`Pane`, `compact`), the desktop strip (`AbovePrompt`), the details pane (`details`) and the settings (`settings`). |
 | `command.run` | `/budget` (show, reply with the numbers, or snooze) and `/budget-config` (open the settings). |
@@ -64,8 +65,8 @@ The split matters: `lib/` is plain functions over plain values, tested directly;
 
 ## Where the figures come from
 
-1. **`session.measure`**, after each response: `rateLimits`' `seven_day` entry.
-2. **Anthropic's usage address**, through `$.session.authorize()`'s sealed handle and `$.http.fetch`: the chat's own account, exact. Throttled to once every 10 minutes per account (30 seconds for `/budget`), across sessions, by `probeAt` in the store.
+1. **`session.measure`**, after each response: `rateLimits`' `seven_day` entry. It comes from the response's headers, sent before the response is counted, so it is one reply behind.
+2. **Anthropic's usage address**, through `$.session.authorize()`'s sealed handle and `$.http.fetch`: the chat's own account, exact. Asked at start, on attach, on `/budget`, when the shown figure is stale, and 10 seconds after each turn (`AFTER_TURN_MS`). Throttled to once every 10 minutes per account (30 seconds after a turn or for `/budget`), across sessions, by `probeAt` in the store.
 3. **`claude -p … /usage`** through `$.process.run`, when Anthropic doesn't answer: the terminal's login, matched to a known week by the reset it names. The probe sets `WEEKLY_BUDGET_PROBE` in its own environment so the Claude Code it starts doesn't probe in turn.
 
 Only sessions a person drives fetch: a `-p` script or SDK run with nothing attached never does. Every figure is keyed by its reset time rounded to the minute, since sources report one reset a moment apart.

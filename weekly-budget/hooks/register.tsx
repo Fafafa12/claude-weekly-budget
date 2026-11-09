@@ -7,6 +7,7 @@ import {
   onPrompt,
   openSettings,
   probeUsageQuietly,
+  refreshAfterTurnQuietly,
   refreshQuietly,
   runBudgetCommand,
   setInteractive,
@@ -14,6 +15,7 @@ import {
   showToast,
   tickQuietly,
 } from './controller'
+import { AFTER_TURN_MS } from './lib/probe'
 import { renderCompact } from './ui/compact'
 import { renderDetails } from './ui/details'
 import { renderSettings } from './ui/settings'
@@ -55,6 +57,17 @@ export const register: Register = on => {
     await onMeasure($, e.rateLimits, e.changed)
 
     return next(e)
+  })
+
+  // A turn of the main loop that cost something: its account's exact figure a little
+  // later, since its replies' own was read before they were counted.
+  on('turn.complete', async ($, e, next) => {
+    const done = await next(e)
+    if (e.agentId === undefined && e.usage !== undefined) {
+      $.clock.after(AFTER_TURN_MS, () => void refreshAfterTurnQuietly($))
+    }
+
+    return done
   })
 
   // A guard: if it fails, the message goes through.

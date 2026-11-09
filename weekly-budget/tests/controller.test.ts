@@ -5,6 +5,7 @@ import type { Engine, MockClock, Plugin } from 'claude-code/testing'
 import { accountSlot, DEFAULT_CONFIG } from '../hooks/lib/config'
 import type { Config } from '../hooks/lib/config'
 import { computeBudget } from '../hooks/lib/plan'
+import { AFTER_TURN_MS } from '../hooks/lib/probe'
 import { fixedOffsetTz, systemTz } from '../hooks/lib/tz'
 import { blockReason, toastText } from '../hooks/lib/warnings'
 
@@ -93,6 +94,7 @@ function engine(
   on('session.attach', (_, e) => ({ clientId: e.clientId }))
   on('session.measure', (_, e) => ({ changed: e.changed }))
   on('prompt.submit', (_, e) => ({ text: e.text }))
+  on('turn.complete', (_, e) => ({ text: e.answer }))
   on('process.run', (_, e) => {
     calls.probes.push({ argv: e.argv, env: e.init?.env })
     const ok = options.usage !== undefined
@@ -1072,6 +1074,70 @@ test('with no first-party login neither address is asked', async ($, on) => {
 
   expect(calls.fetches).toEqual([])
   expect(calls.probes).toHaveLength(1)
+})
+
+// A reply's figure comes with its response's headers, sent before that response is
+// counted: after a turn, the account's exact figure is fetched a little later.
+const TOKENS = { input_tokens: 1200, output_tokens: 300, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'claude-opus-5-5' }
+const turnDone = ($: Engine, more: { agentId?: string; usage?: typeof TOKENS | undefined } = { usage: TOKENS }) =>
+  $.turn.complete({ answer: 'Done.', durationMs: 4000, isAborted: false, turnId: 'turn-1', reason: 'answer', ...more })
+
+test("a turn's end fetches the account's exact figure a little later", { plugins: [probe] }, async ($, on) => {
+  const oauth = { profile: PROFILE, usage: usageAnswer(54) as unknown }
+  const { calls, clock } = engine(on, { store: shown, oauth })
+  await start($, clock)
+  await clock.advance(60_000)
+  const fetched = calls.fetches.length
+
+  await measure($, 54) // the reply's figure: from before the reply was counted
+  oauth.usage = usageAnswer(56) // what Anthropic counts once it is
+  await turnDone($)
+  expect(calls.fetches).toHaveLength(fetched)
+
+  await clock.advance(AFTER_TURN_MS)
+
+  expect(calls.fetches.slice(fetched).map(f => f.url)).toEqual(['https://api.anthropic.com/api/oauth/usage'])
+  expect(await storedReading($)).toEqual({ percentUsed: 56, resetsMs: reset, at: now + 60_000 + AFTER_TURN_MS })
+  expect(calls.statuses.at(-1)).toBe('Week 56% / 39% allowed · today 17% over')
+})
+
+test("a subagent's turn, or one that cost nothing, fetches nothing after it", async ($, on) => {
+  const { calls, clock } = engine(on, { store: shown, oauth: { profile: PROFILE, usage: usageAnswer(54) } })
+  await start($, clock)
+  await clock.advance(60_000)
+  const fetched = calls.fetches.length
+
+  await turnDone($, { agentId: 'agent-7', usage: TOKENS })
+  await turnDone($, { usage: undefined })
+  await clock.advance(AFTER_TURN_MS)
+
+  expect(calls.fetches).toHaveLength(fetched)
+})
+
+test('turns ending less than 30 seconds apart fetch once', async ($, on) => {
+  const { calls, clock } = engine(on, { store: shown, oauth: { profile: PROFILE, usage: usageAnswer(54) } })
+  await start($, clock)
+  await clock.advance(60_000)
+  const fetched = calls.fetches.length
+
+  await turnDone($)
+  await clock.advance(AFTER_TURN_MS)
+  await turnDone($)
+  await clock.advance(AFTER_TURN_MS)
+
+  expect(calls.fetches).toHaveLength(fetched + 1)
+})
+
+test("with no first-party login, a turn's end runs no /usage", async ($, on) => {
+  const { calls, clock } = engine(on, { store: { ...shown, lastReading: reading(45) }, usage: USAGE_48 })
+  await start($, clock)
+  const probes = calls.probes.length
+
+  await turnDone($)
+  await clock.advance(AFTER_TURN_MS)
+
+  expect(calls.fetches).toEqual([])
+  expect(calls.probes).toHaveLength(probes)
 })
 
 test("an account's own fetch is throttled for it alone", async ($, on) => {
