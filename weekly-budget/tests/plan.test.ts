@@ -286,7 +286,7 @@ test('usageAtDayStart uses the record for today, else its best guess', async () 
 })
 
 // Settings are kept per account, named by the slot of the week its limit resets in:
-// the same weekday and time every week (Experts-cpa Tue 20:00, Pro Fri 12:00).
+// the same weekday and time every week (Acme Tue 20:00, Pro Fri 12:00).
 test('an account keeps its slot from one week to the next', async () => {
   expect(accountSlot(reset)).toBe(accountSlot(reset + 7 * DAY_MS))
   expect(accountSlot(reset)).not.toBe(accountSlot(reset - DAY_MS))

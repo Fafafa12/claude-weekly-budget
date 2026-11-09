@@ -1023,8 +1023,8 @@ test('an account seen for the first time starts with the settings last used on t
 // Each chat's own login, through the sealed handle: who it is signed in as, and its
 // account's week, exact to the second.
 const PROFILE = {
-  account: { uuid: 'acc-1', display_name: 'Faneva', email: 'faneva@experts-cpa.com' },
-  organization: { uuid: 'org-1', name: 'Experts-cpa', organization_type: 'claude_team' },
+  account: { uuid: 'acc-1', display_name: 'Alex', email: 'you@acme.dev' },
+  organization: { uuid: 'org-1', name: 'Acme', organization_type: 'claude_team' },
 }
 const usageAnswer = (utilization: number, resetsAt = '2026-11-10T17:00:00.460074+00:00') => ({
   seven_day: { utilization, resets_at: resetsAt },
@@ -1050,7 +1050,7 @@ test('the account is named in /budget\'s reply', async ($, on) => {
   await start($, clock)
 
   expect((await run($, 'budget', '')).text).toBe(
-    '33% of 39% · 6% left today · resets Tue 20:00 · Experts-cpa (faneva@experts-cpa.com)',
+    '33% of 39% · 6% left today · resets Tue 20:00 · Acme (you@acme.dev)',
   )
 })
 
@@ -1160,7 +1160,7 @@ test("a reply and the account's own answer name one week, though one comes a mom
   const weeks = (await stored($, 'weeks')) as StoredWeek[]
   expect(weeks.map(w => w.reading.resetsMs)).toEqual([reset])
   expect(((await stored($, 'accounts')) as Record<string, { slot: string }>)['acc-1']?.slot).toBe(accountSlot(reset))
-  expect((await run($, 'budget', '')).text).toContain('Experts-cpa (faneva@experts-cpa.com)')
+  expect((await run($, 'budget', '')).text).toContain('Acme (you@acme.dev)')
 })
 
 // The desktop app drives Claude Code through the SDK: its chat starts with no surface
@@ -1180,7 +1180,7 @@ test("the desktop app's chat is named, and fetches its week, once its client att
   ])
   expect(((await stored($, 'accounts')) as Record<string, { slot: string }>)['acc-1']?.slot).toBe(accountSlot(proReset))
   expect(await stored($, 'surfaceWeeks')).toEqual({ desktop: proReset })
-  expect((await run($, 'budget', '')).text).toContain('Experts-cpa (faneva@experts-cpa.com)')
+  expect((await run($, 'budget', '')).text).toContain('Acme (you@acme.dev)')
 })
 
 test('a client attaching to a chat someone already drives fetches nothing more', async ($, on) => {
@@ -1198,7 +1198,7 @@ test('settings follow an account whose week moves to another slot', { plugins: [
   const { clock } = engine(on, {
     store: {
       configs: { [accountSlot(oldReset)]: { ...pinned, mode: 'block' } },
-      accounts: { 'acc-1': { email: 'faneva@experts-cpa.com', slot: accountSlot(oldReset) } },
+      accounts: { 'acc-1': { email: 'you@acme.dev', slot: accountSlot(oldReset) } },
     },
     oauth: { profile: PROFILE, usage: usageAnswer(10) },
   })

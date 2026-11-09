@@ -205,20 +205,20 @@ test('pickWeek ignores weeks that are over, and marks an old reading stale', asy
   expect(pickWeek(null, [], null, now)).toEqual({ entry: null, reading: null, staleSince: null })
 })
 
-const acc = { id: 'acc-1', email: 'faneva@experts-cpa.com', name: 'Faneva', organization: 'Experts-cpa', organizationType: 'claude_team' }
+const acc = { id: 'acc-1', email: 'you@acme.dev', name: 'Alex', organization: 'Acme', organizationType: 'claude_team' }
 
 test('an account is kept with the weekly slot it was last seen in', async () => {
   const $ = fakeEngine()
   expect(await loadAccounts($)).toEqual({})
   await saveAccount($, acc, null)
   await saveAccount($, acc, '61200000')
-  await saveAccount($, { ...acc, email: 'new@experts-cpa.com' }, null)
-  expect(await loadAccounts($)).toEqual({ 'acc-1': { ...acc, email: 'new@experts-cpa.com', slot: '61200000' } })
+  await saveAccount($, { ...acc, email: 'new@acme.dev' }, null)
+  expect(await loadAccounts($)).toEqual({ 'acc-1': { ...acc, email: 'new@acme.dev', slot: '61200000' } })
 })
 
 test('labelForSlot names the account a slot was last seen with', async () => {
   const accounts = { 'acc-1': { ...acc, slot: '61200000' } }
-  expect(labelForSlot(accounts, '61200000')).toBe('Experts-cpa (faneva@experts-cpa.com)')
+  expect(labelForSlot(accounts, '61200000')).toBe('Acme (you@acme.dev)')
   expect(labelForSlot(accounts, '1')).toBeNull()
   expect(labelForSlot(accounts, null)).toBeNull()
 })

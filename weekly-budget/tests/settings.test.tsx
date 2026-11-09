@@ -745,11 +745,11 @@ test('the settings name the account, once Anthropic has said who it is', async (
     store: {
       config: DEFAULT_CONFIG,
       lastReading: readingOf(33),
-      accounts: { 'acc-1': { email: 'faneva@experts-cpa.com', organization: 'Experts-cpa', organizationType: 'claude_team', slot: accountSlot(reset) } },
+      accounts: { 'acc-1': { email: 'you@acme.dev', organization: 'Acme', organizationType: 'claude_team', slot: accountSlot(reset) } },
     },
   })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
 
-  expect((await ui.find({ type: 'Text', text: /^Settings for/ }))?.text).toBe('Settings for Experts-cpa (faneva@experts-cpa.com)')
+  expect((await ui.find({ type: 'Text', text: /^Settings for/ }))?.text).toBe('Settings for Acme (you@acme.dev)')
   await ui.unmount()
 })

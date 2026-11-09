@@ -4,12 +4,12 @@ import { accountLabel, parseProfile, parseUsageApi } from '../hooks/lib/account'
 
 // The shapes Anthropic's account addresses answered on 2026-11-06 (trimmed, made up).
 const PROFILE = {
-  account: { uuid: 'acc-1', full_name: 'Faneva R', display_name: 'Faneva', email: 'faneva@experts-cpa.com' },
-  organization: { uuid: 'org-1', name: 'Experts-cpa', organization_type: 'claude_team' },
+  account: { uuid: 'acc-1', full_name: 'Alex R', display_name: 'Alex', email: 'you@acme.dev' },
+  organization: { uuid: 'org-1', name: 'Acme', organization_type: 'claude_team' },
 }
 const PERSONAL = {
-  account: { uuid: 'acc-2', display_name: 'Faneva', email: 'faneva@example.com' },
-  organization: { uuid: 'org-2', name: "faneva@example.com's Organization", organization_type: 'claude_pro' },
+  account: { uuid: 'acc-2', display_name: 'Alex', email: 'you@example.com' },
+  organization: { uuid: 'org-2', name: "you@example.com's Organization", organization_type: 'claude_pro' },
 }
 const USAGE = {
   five_hour: { utilization: 12, resets_at: '2026-11-06T13:00:00+00:00' },
@@ -20,9 +20,9 @@ const now = Date.parse('2026-11-06T09:00:00Z')
 test('parseProfile reads who the chat is signed in as', async () => {
   expect(parseProfile(PROFILE)).toEqual({
     id: 'acc-1',
-    email: 'faneva@experts-cpa.com',
-    name: 'Faneva',
-    organization: 'Experts-cpa',
+    email: 'you@acme.dev',
+    name: 'Alex',
+    organization: 'Acme',
     organizationType: 'claude_team',
   })
   expect(parseProfile({ account: { email: 'x@y' } })).toBeNull() // no id
@@ -30,8 +30,8 @@ test('parseProfile reads who the chat is signed in as', async () => {
 })
 
 test('accountLabel names a team account by its organization, and any by its email', async () => {
-  expect(accountLabel(parseProfile(PROFILE))).toBe('Experts-cpa (faneva@experts-cpa.com)')
-  expect(accountLabel(parseProfile(PERSONAL))).toBe('faneva@example.com')
+  expect(accountLabel(parseProfile(PROFILE))).toBe('Acme (you@acme.dev)')
+  expect(accountLabel(parseProfile(PERSONAL))).toBe('you@example.com')
   expect(accountLabel(null)).toBeNull()
 })
 

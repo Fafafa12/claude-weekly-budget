@@ -384,7 +384,7 @@ for (const surface of SURFACES) {
 }
 
 const named = {
-  'acc-1': { email: 'faneva@experts-cpa.com', organization: 'Experts-cpa', organizationType: 'claude_team', slot: accountSlot(reset) },
+  'acc-1': { email: 'you@acme.dev', organization: 'Acme', organizationType: 'claude_team', slot: accountSlot(reset) },
 }
 for (const surface of SURFACES) {
   test(`the details name the account on ${surface}`, async ($, on) => {
@@ -392,7 +392,7 @@ for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...PANE, surface })
 
     expect((await ui.find({ type: 'Text', text: /^Account:/ }))?.props).toMatchObject({ dimColor: true })
-    expect((await ui.find({ type: 'Text', text: /^Account:/ }))?.text).toBe('Account: Experts-cpa (faneva@experts-cpa.com)')
+    expect((await ui.find({ type: 'Text', text: /^Account:/ }))?.text).toBe('Account: Acme (you@acme.dev)')
     await ui.unmount()
   })
 
