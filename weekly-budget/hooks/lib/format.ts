@@ -111,6 +111,23 @@ export function statusLine(
   }
 }
 
+// The details' line on why they show this week: the chat's own, or, with no figure of
+// its own yet, the week its app last saw, or the latest any chat saw (either of which
+// may be another account's).
+const APP_NAMES: Record<string, string> = { terminal: 'the terminal', vscode: 'VS Code', desktop: 'the desktop app' }
+
+export function weekBasisText(basis: 'own' | 'app' | 'latest', surface: string | null): string {
+  const notYet = ' (this chat has no figure of its own yet)'
+  switch (basis) {
+    case 'own':
+      return "Week: this chat's own"
+    case 'app':
+      return `Week: the one ${(surface !== null ? APP_NAMES[surface] : undefined) ?? 'this app'} last saw${notYet}`
+    case 'latest':
+      return `Week: the latest any chat saw${notYet}`
+  }
+}
+
 export function paneTitle(b: Budget | null, staleSince: number | null, tz: Tz, now: number): string {
   if (b === null) return 'Weekly budget · no reading yet'
   const summary = `${pct(b.used)}% of ${pct(b.allowed)}% · ${todayText(b)}`

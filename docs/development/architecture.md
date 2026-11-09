@@ -62,7 +62,7 @@ The split matters: `lib/` is plain functions over plain values, tested directly;
 ```
 
 - **`acceptReading`** keeps a figure in its week's record: the better figure (higher, then later), what today began with (for Adaptive), a sample when the figure rose (for the pace), the account's link to its week, and the heads-up or over toast if one is due.
-- **`loadView`** reads everything once, at one `now`: picks the week to show (this chat's own, else the one its app last saw, else the latest), that account's settings and name, the budget, and the pace. Every display and decision comes from it.
+- **`loadView`** reads everything once, at one `now`: picks the week to show (this chat's own, else the one its app last saw, else the latest) and says which (`basis`, shown in the details as "Week: …"), that account's settings and name, the budget, and the pace. Every display and decision comes from it.
 - **`refresh`** pushes it out: the status line (terminal only) and a redraw of every open pane and the strip.
 
 ## Where the figures come from

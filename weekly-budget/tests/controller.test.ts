@@ -956,6 +956,31 @@ test('a reply tells which week its surface is on', { plugins: [probe] }, async (
   expect(await stored($, 'surfaceWeeks')).toEqual({ desktop: proReset })
 })
 
+// The details say why they show the week they do, so a screenshot shows the cause.
+const DETAILS_PANE = {
+  plugin: 'weekly-budget',
+  component: 'Pane',
+  requestId: 'details',
+  surface: 'terminal',
+  props: { title: 'Weekly budget', isFocused: false, bodyColumns: 70, placement: 'dock', scroll: { offset: 0, bodyRows: 30 }, view: {} },
+} as const
+
+test("the details say whether the week is the chat's own or its app's last", async ($, on) => {
+  const { clock } = engine(on, { store: { ...shown, weeks: [teamWeek(49, now - 5 * 60e3), proWeek(3)], surfaceWeeks: { terminal: proReset } } })
+  await start($, clock)
+  const ui = await $.ui.mount(DETAILS_PANE)
+
+  expect((await ui.find({ type: 'Text', text: /^Week:/ }))?.text).toBe(
+    'Week: the one the terminal last saw (this chat has no figure of its own yet)',
+  )
+
+  await measure($, 50)
+
+  expect((await ui.find({ type: 'Text', text: /^Week:/ }))?.text).toBe("Week: this chat's own")
+  expect((await ui.find({ type: 'Text', text: /^Week:/ }))?.props.dimColor).toBe(true)
+  await ui.unmount()
+})
+
 test('a new chat shows the week its surface last saw, else the one read last', async ($, on) => {
   const weeks = [teamWeek(49, now - 5 * 60e3), proWeek(3)]
   const pro = engine(on, { store: { ...shown, weeks, surfaceWeeks: { terminal: proReset } } })

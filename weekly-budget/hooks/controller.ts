@@ -33,7 +33,7 @@ import {
   saveWeekLedger,
   saveWeekReading,
 } from './lib/store'
-import type { WeekEntry } from './lib/store'
+import type { WeekBasis, WeekEntry } from './lib/store'
 import { fixedOffsetTz, systemTz } from './lib/tz'
 import type { Tz } from './lib/tz'
 import { dependsOnSurface, gatePrompt, isGated, measureToast, parseSnooze, toastText } from './lib/warnings'
@@ -111,7 +111,7 @@ async function loadView($: EngineInterface) {
   // its surface last saw, else the one read last (pickWeek). Its settings are that
   // account's (pickConfig).
   const surfaceWeek = surface === null ? null : (surfaceWeeks[surface] ?? null)
-  const { entry, reading, staleSince } = pickWeek(own, weeks, surfaceWeek, now)
+  const { entry, reading, staleSince, basis } = pickWeek(own, weeks, surfaceWeek, now)
   const accountWeek = reading?.resetsMs ?? null
   const cfg = pickConfig(configs, legacy, accountWeek, surfaceWeek)
   // How that account is named, once a chat on it has asked Anthropic (null before).
@@ -120,7 +120,8 @@ async function loadView($: EngineInterface) {
     reading === null
       ? null
       : computeBudget(reading, cfg, now, tz, usageAtDayStart(reading, entry?.dayStart ?? null, now, tz))
-  return { now, tz, cfg, snoozedUntil, reading, staleSince, budget, accountWeek, label, pace: paceOf(budget, entry, now, tz) }
+  const pace = paceOf(budget, entry, now, tz)
+  return { now, tz, cfg, snoozedUntil, reading, staleSince, budget, accountWeek, label, pace, basis, surface }
 }
 
 // Where the pace leads, in words (lib/forecast.ts): today's from the week's last two
@@ -161,9 +162,11 @@ export async function currentBudget($: EngineInterface): Promise<{
   now: number
   label: string | null
   pace: { today: PaceLine | null; week: PaceLine | null } | null
+  basis: WeekBasis | null
+  surface: string | null
 }> {
-  const { budget, staleSince, cfg, snoozedUntil, tz, now, label, pace } = await loadView($)
-  return { budget, staleSince, cfg, snoozedUntil, tz, now, label, pace }
+  const { budget, staleSince, cfg, snoozedUntil, tz, now, label, pace, basis, surface } = await loadView($)
+  return { budget, staleSince, cfg, snoozedUntil, tz, now, label, pace, basis, surface }
 }
 
 // Brings the status line and the drawn panes up to the store.

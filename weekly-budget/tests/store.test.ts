@@ -198,11 +198,19 @@ test('pickWeek without a reading of its own shows the week its surface last saw,
 })
 
 test('pickWeek ignores weeks that are over, and marks an old reading stale', async () => {
-  expect(pickWeek(at(5, now), [weekOf(at(6, now))], null, now)).toEqual({ entry: null, reading: null, staleSince: null })
+  expect(pickWeek(at(5, now), [weekOf(at(6, now))], null, now)).toEqual({ entry: null, reading: null, staleSince: null, basis: null })
   const old = at(49, team, now - STALE_MS - 1)
   expect(pickWeek(null, [weekOf(old)], null, now).staleSince).toBe(old.at)
   expect(pickWeek(null, [weekOf(at(49, team, now - STALE_MS))], null, now).staleSince).toBeNull()
-  expect(pickWeek(null, [], null, now)).toEqual({ entry: null, reading: null, staleSince: null })
+  expect(pickWeek(null, [], null, now)).toEqual({ entry: null, reading: null, staleSince: null, basis: null })
+})
+
+test('pickWeek says why it picked the week', async () => {
+  const weeks = [weekOf(at(49, team, now - 30 * MIN_MS)), weekOf(at(3, pro, now - MIN_MS))]
+  expect(pickWeek(at(4, pro), weeks, team, now).basis).toBe('own')
+  expect(pickWeek(null, weeks, team, now).basis).toBe('app')
+  expect(pickWeek(null, weeks, null, now).basis).toBe('latest')
+  expect(pickWeek(null, weeks, now - 1, now).basis).toBe('latest')
 })
 
 const acc = { id: 'acc-1', email: 'you@acme.dev', name: 'Alex', organization: 'Acme', organizationType: 'claude_team' }

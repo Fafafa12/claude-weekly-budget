@@ -8,6 +8,7 @@ Each Claude account has its own weekly limit, and many people have two: a person
 - **Each account has its own settings**: its own plan, mode, heads-up and display. The settings header says whose they are.
 - **An account seen for the first time** starts with a copy of the settings last used on the same app.
 - **If Claude moves an account's reset** to another day or hour, its settings follow it, as long as a chat on it has asked Anthropic who it is.
+- **The details say why they show a week**, under the account: "Week: this chat's own", or, before the chat has a figure of its own, "Week: the one the terminal last saw" or "Week: the latest any chat saw". Those two are guesses, and may be another account's week until the chat's first figure arrives.
 - **Snooze is one for all.**
 
 ## How accounts are named

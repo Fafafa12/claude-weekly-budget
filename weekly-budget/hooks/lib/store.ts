@@ -257,27 +257,36 @@ export async function saveSurfaceWeek($: EngineInterface, surface: string, weekK
   if (weeks[surface] !== weekKey) await $.store.set(KEY.surfaceWeeks, { ...weeks, [surface]: weekKey })
 }
 
+// Why a week is shown: the chat's own figure says it is its account's ('own'); with no
+// figure of its own yet, it is the week its app last saw ('app'), else the one any chat
+// read last ('latest'), either of which may be another account's.
+export type WeekBasis = 'own' | 'app' | 'latest'
+
 // Which week to show, of the weeks still running: the session's own (its replies say
 // which), with the better of its own reading and the stored one; without one, the week
-// its surface last saw; else the one read last.
+// its surface last saw; else the one read last. Says which of these it was.
 export function pickWeek(
   own: Reading | null,
   weeks: readonly WeekEntry[],
   preferred: number | null,
   now: number,
-): { entry: WeekEntry | null; reading: Reading | null; staleSince: number | null } {
+): { entry: WeekEntry | null; reading: Reading | null; staleSince: number | null; basis: WeekBasis | null } {
   const live = weeks.filter(w => w.reading.resetsMs > now)
   let entry: WeekEntry | null
   let reading: Reading | null
+  let basis: WeekBasis | null
   if (own !== null && own.resetsMs > now) {
     entry = live.find(w => w.reading.resetsMs === own.resetsMs) ?? null
     reading = entry === null || isBetterInWeek(own, entry.reading) ? own : entry.reading
+    basis = 'own'
   } else {
+    const remembered = live.find(w => w.reading.resetsMs === preferred) ?? null
     entry =
-      live.find(w => w.reading.resetsMs === preferred) ??
+      remembered ??
       live.reduce<WeekEntry | null>((last, w) => (last === null || w.reading.at > last.reading.at ? w : last), null)
     reading = entry?.reading ?? null
+    basis = entry === null ? null : remembered !== null ? 'app' : 'latest'
   }
   const staleSince = reading !== null && now - reading.at > STALE_MS ? reading.at : null
-  return { entry, reading, staleSince }
+  return { entry, reading, staleSince, basis }
 }

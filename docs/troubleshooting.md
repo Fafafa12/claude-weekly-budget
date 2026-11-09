@@ -30,6 +30,8 @@ The name then shows in the settings, the details and `/budget`'s reply. With no 
 
 Each account's week is told apart by when it resets. Before a chat's first figure, it shows the week last seen on the same app, so a brand-new chat can briefly show the other account's week. Send a message or run `/budget` and it switches to its own. If two accounts reset at exactly the same minute, the plugin can't tell them apart.
 
+The details tell you which case you're in, under the account line. "Week: this chat's own" means the figure is the chat's own account's. "… last saw (this chat has no figure of its own yet)" means it's a guess. If a chat says "this chat's own" and still shows another account's numbers, that's a bug: please [report it](https://github.com/Fafafa12/claude-weekly-budget/issues) with a screenshot of the details, and the time.
+
 ## The desktop app doesn't show the new version
 
 The desktop app keeps its own copy of the marketplace. Update from a terminal, then restart the desktop app:

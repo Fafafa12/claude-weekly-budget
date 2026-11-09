@@ -12,7 +12,7 @@ import { DAY_NAMES, DEFAULT_CONFIG, dayShares } from '../weekly-budget/hooks/lib
 import type { Config, Weekday } from '../weekly-budget/hooks/lib/config'
 import { todayForecast, todayPaceLine, weekForecast, weekPaceLine } from '../weekly-budget/hooks/lib/forecast'
 import type { PaceLine } from '../weekly-budget/hooks/lib/forecast'
-import { budgetReply, countdown, LEFTOVER_LABELS, MODE_LABELS, pct, stateLabel, statusLine, todayText } from '../weekly-budget/hooks/lib/format'
+import { budgetReply, countdown, LEFTOVER_LABELS, MODE_LABELS, pct, stateLabel, statusLine, todayText, weekBasisText } from '../weekly-budget/hooks/lib/format'
 import { computeBudget } from '../weekly-budget/hooks/lib/plan'
 import { barSegments, barSvg, COLORS, MIN_LABEL_SHARE } from '../weekly-budget/hooks/lib/svg'
 import { fixedOffsetTz } from '../weekly-budget/hooks/lib/tz'
@@ -188,6 +188,7 @@ function terminal(): string {
     [{ t: 'Weekly budget', weight: 700 }],
     [{ t: stateLabel(budget.state), fill: STATE[budget.state], weight: 600 }],
     [{ t: `Account: ${ACCOUNT}`, fill: C.dim }],
+    [{ t: weekBasisText('own', 'terminal'), fill: C.dim }],
     [],
     [{ t: `Used ${pct(budget.used)}%` }],
     [{ t: `Allowed by tonight ${pct(budget.allowed)}%` }],
@@ -221,7 +222,7 @@ function terminal(): string {
 // ── VS Code: the Claude panel with the budget panel on top, details open.
 function vscode(): string {
   const W = 1180
-  const H = 640
+  const H = 662
   const SIDE = 600 // where the Claude panel starts
   let s = windowFrame(W, H, 'invoice-parser.ts — acme-app — Visual Studio Code')
   // An editor on the left, for context.
@@ -244,7 +245,7 @@ function vscode(): string {
   // The budget panel: the host's title, then the plugin's body.
   const X = SIDE + 20
   const PW = W - SIDE - 40
-  s += rect(X, 82, PW, 470, 10, C.card, C.border)
+  s += rect(X, 82, PW, 492, 10, C.card, C.border)
   s += text(X + 16, 108, 'Weekly budget', { size: 13, weight: 600 })
   s += text(X + PW - 16, 108, '×', { size: 16, anchor: 'end', fill: C.dim })
   s += `<line x1="${X}" y1="120" x2="${X + PW}" y2="120" stroke="${C.border}"/>`
@@ -258,7 +259,8 @@ function vscode(): string {
     s += text(BX, y, runs, { size: 13, ...o })
     y += gap
   }
-  add(`Account: ${ACCOUNT}`, { fill: C.dim }, 30)
+  add(`Account: ${ACCOUNT}`, { fill: C.dim })
+  add(weekBasisText('own', 'vscode'), { fill: C.dim }, 30)
   add(`Used ${pct(budget.used)}%`)
   add(`Allowed by tonight ${pct(budget.allowed)}%`)
   add(todayText(budget), { fill: STATE[budget.state] }, 30)

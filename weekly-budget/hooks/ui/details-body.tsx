@@ -4,7 +4,7 @@ import { applySnooze, resolveTz } from '../controller'
 import type { currentBudget } from '../controller'
 import { DAY_NAMES } from '../lib/config'
 import type { PaceLine } from '../lib/forecast'
-import { asOf, countdown, LEFTOVER_LABELS, MODE_LABELS, pct, todayText } from '../lib/format'
+import { asOf, countdown, LEFTOVER_LABELS, MODE_LABELS, pct, todayText, weekBasisText } from '../lib/format'
 import { planLine, STATE_COLORS } from './shared'
 
 const MIN_MS = 60_000
@@ -50,14 +50,19 @@ function renderPace($: EngineInterface, e: RenderInput<'Pane'>, name: string, li
 export function renderDetailsBody(
   $: EngineInterface,
   e: RenderInput<'Pane'>,
-  { budget, staleSince, cfg, snoozedUntil, tz, now, label, pace }: BudgetView,
+  { budget, staleSince, cfg, snoozedUntil, tz, now, label, pace, basis, surface }: BudgetView,
 ): RenderElement {
   const { Box, Button, Text } = $.ui.resolve(e)
   const isSnoozed = snoozedUntil !== null && snoozedUntil > now
 
   return (
     <Box flexDirection="column" gap={1}>
-      {label !== null && <Text dimColor>{`Account: ${label}`}</Text>}
+      {(label !== null || basis !== null) && (
+        <Box flexDirection="column">
+          {label !== null && <Text dimColor>{`Account: ${label}`}</Text>}
+          {basis !== null && <Text dimColor>{weekBasisText(basis, surface)}</Text>}
+        </Box>
+      )}
       {budget !== null && (
         <Box flexDirection="column">
           {staleSince !== null && <Text dimColor>{`Last known, as of ${asOf(staleSince, tz, now)}`}</Text>}

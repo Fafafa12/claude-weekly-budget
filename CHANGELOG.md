@@ -4,6 +4,11 @@ Every version of weekly-budget, newest first. Each one is also a [release on Git
 
 To update an installed copy, run `claude plugin marketplace update weekly-budget`, then `claude plugin update weekly-budget@weekly-budget`, and restart your Claude apps.
 
+## 0.7.3 · 2026-11-09
+
+### Added
+- **The details say why they show this week**, in a dim line under the account: "Week: this chat's own" once the chat has a figure of its own, or, before that, "Week: the one the terminal last saw" (or VS Code, or the desktop app) or "Week: the latest any chat saw", each marked "(this chat has no figure of its own yet)". Those two may be another account's week, so a screenshot now shows why a chat on one account shows another's numbers.
+
 ## 0.7.2 · 2026-11-09
 
 ### Changed

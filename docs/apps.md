@@ -27,7 +27,7 @@ In the bar, █ is what you've used, │ marks what's allowed by tonight, and �
 
 ### Panes
 
-`/budget` opens the **details** beside the chat: the state in a coloured word (On track, Running low, Over today), the account, the numbers, the pace, the reset, your plan, the mode and the snooze buttons. `/budget-config` opens the **settings** with the keyboard on them: Tab or the arrows move, Enter chooses, Esc goes back to the prompt, and `ctrl+x tab` comes back to the pane. Nothing opens by itself in the terminal.
+`/budget` opens the **details** beside the chat: the state in a coloured word (On track, Running low, Over today), the account and why this week is shown, the numbers, the pace, the reset, your plan, the mode and the snooze buttons. `/budget-config` opens the **settings** with the keyboard on them: Tab or the arrows move, Enter chooses, Esc goes back to the prompt, and `ctrl+x tab` comes back to the pane. Nothing opens by itself in the terminal.
 
 ## VS Code
 
